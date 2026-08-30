@@ -35,6 +35,7 @@ describe("setupAiContext", () => {
     await expect(readFile(path.join(directory, ".ai", "ongoing", "TASK_TEMPLATE.md"), "utf8")).resolves.toContain("## Goal and acceptance criteria");
     await expect(readFile(path.join(directory, ".ai", "ongoing", "README.md"), "utf8")).resolves.toContain("Copy `TASK_TEMPLATE.md`");
     await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toContain(".ai/ongoing/current.md");
+    await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toContain("when the user explicitly asks");
   });
 
   it("does not overwrite an existing AI context entry point", async () => {

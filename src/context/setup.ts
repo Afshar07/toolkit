@@ -130,6 +130,8 @@ This file is the stable entry point for AI-assisted work in this workspace. Deta
 5. Inspect an exact user-named file before broad discovery.
 6. Read \`.ai/ongoing/current.md\`. When it names an ongoing task, read that task's note before continuing its work.
 
+Only create or add tasks in \`.ai/ongoing/\` when the user explicitly asks, or when the work is large enough that it cannot reasonably be completed in one session. Otherwise, do not use ongoing-task notes.
+
 If no project matches, continue only when the task is clearly workspace-level. If several projects match and the choice changes the work, ask which project is in scope.
 
 ## Delegation
