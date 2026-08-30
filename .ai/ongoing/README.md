@@ -1,10 +1,13 @@
 # Ongoing tasks
 
-Use this directory to keep notes for work currently in progress.
+Use this directory for work that spans more than one session.
 
-Create one Markdown file per task. Include:
+## Starting a long-running task
 
-- Goal and acceptance criteria
-- Current status and decisions
-- Files changed or under investigation
-- Verification completed and remaining work
+1. Copy `TASK_TEMPLATE.md` to a descriptive task file name, such as `workspace-audit.md`.
+2. Update `current.md` to link to that note before ending the session.
+3. Fill in the task's goal, acceptance criteria, current status, decisions, files under investigation, and completed and remaining verification.
+
+## Resuming work
+
+Read `current.md` first. If it links to a task note, read that note before making changes. Update the note and `current.md` when the active task changes or completes.
