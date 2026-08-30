@@ -1,7 +1,7 @@
 import { access, mkdir, rm } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
-import { assertWorkspaceManifest, type WorkspaceManifest } from "../workspace/manifest.js";
+import { assertWorkspaceManifest, type GitRemote, type Repository, type WorkspaceManifest } from "../workspace/manifest.js";
 import { resolveManifestPath } from "../workspace/path.js";
 
 export interface SetupResult {
@@ -12,6 +12,11 @@ export interface SetupResult {
 export interface SetupConflict {
   path: string;
   reason: string;
+}
+
+export interface SetupOptions {
+  selectFallbackRemote?: (repository: Repository, failedRemote: GitRemote) => Promise<GitRemote | undefined>;
+  onCloneRemoteChanged?: (repository: Repository, cloneRemote: GitRemote) => void;
 }
 
 export class WorkspaceSetupError extends Error {
@@ -25,12 +30,12 @@ export class WorkspaceSetupError extends Error {
 
 const cloneConcurrency = 3;
 
-export async function setupWorkspace(manifest: WorkspaceManifest, destination: string, onProgress: (message: string) => void): Promise<SetupResult> {
+export async function setupWorkspace(manifest: WorkspaceManifest, destination: string, onProgress: (message: string) => void, options?: SetupOptions): Promise<SetupResult> {
   assertWorkspaceManifest(manifest);
-  return setupWorkspaceAt(manifest, path.join(destination, manifest.name), onProgress);
+  return setupWorkspaceAt(manifest, path.join(destination, manifest.name), onProgress, options);
 }
 
-export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination: string, onProgress: (message: string) => void): Promise<SetupResult> {
+export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination: string, onProgress: (message: string) => void, options?: SetupOptions): Promise<SetupResult> {
   assertWorkspaceManifest(manifest);
   const root = path.resolve(destination);
   const cloned: string[] = [];
@@ -38,7 +43,7 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
   const pending = [] as typeof manifest.repositories;
   const conflicts: SetupConflict[] = [];
 
-  const repositories = manifest.rootRepository
+  const repositories: Repository[] = manifest.rootRepository
     ? [{ ...manifest.rootRepository, path: "." }, ...manifest.repositories]
     : manifest.repositories;
 
@@ -69,23 +74,39 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
     while (pending.length > 0) {
       const repository = pending.shift()!;
       const target = repository.path === "." ? root : resolveManifestPath(root, repository.path);
-      let createdTarget = false;
-      try {
-        const cloneUrl = getCloneUrl(repository);
-        onProgress(`Cloning ${cloneUrl} into ${repository.path}...`);
-        await mkdir(target);
-        createdTarget = true;
-        await execa("git", ["clone", "--origin", repository.cloneRemote, cloneUrl, target], { stdio: "inherit" });
+      let cloneRemote = repository.cloneRemote;
+      let cloneFailed = false;
+      while (true) {
+        let createdTarget = false;
+        try {
+          const cloneUrl = getCloneUrl(repository, cloneRemote);
+          onProgress(`Cloning ${cloneUrl} into ${repository.path}...`);
+          await mkdir(target);
+          createdTarget = true;
+          await execa("git", ["clone", "--origin", cloneRemote, cloneUrl, target], { stdio: "inherit" });
+        } catch {
+          if (createdTarget) await rm(target, { recursive: true, force: true });
+          const failedRemote = repository.remotes.find((remote) => remote.name === cloneRemote)!;
+          const fallback = await options?.selectFallbackRemote?.(repository, failedRemote);
+          if (fallback && fallback.name !== cloneRemote && repository.remotes.some((remote) => remote.name === fallback.name)) {
+            cloneRemote = fallback.name;
+            continue;
+          }
+          onProgress(`Failed to clone ${repository.path} from remote ${cloneRemote}.`);
+          failed.push(`${repository.path} (clone remote ${cloneRemote})`);
+          cloneFailed = true;
+          break;
+        }
+        if (cloneRemote !== repository.cloneRemote) {
+          options?.onCloneRemoteChanged?.(repository, repository.remotes.find((remote) => remote.name === cloneRemote)!);
+        }
         onProgress(`Cloned ${repository.path}.`);
         cloned.push(repository.path);
-      } catch {
-        if (createdTarget) await rm(target, { recursive: true, force: true });
-        onProgress(`Failed to clone ${repository.path}.`);
-        failed.push(`${repository.path} (clone)`);
-        continue;
+        break;
       }
 
-      for (const remote of repository.remotes.filter((remote) => remote.name !== repository.cloneRemote)) {
+      if (cloneFailed) continue;
+      for (const remote of repository.remotes.filter((remote) => remote.name !== cloneRemote)) {
         try {
           await execa("git", ["-C", target, "remote", "add", remote.name, remote.url]);
         } catch {
@@ -117,8 +138,8 @@ async function inspectDestination(target: string, remoteName: string, expectedRe
   }
 }
 
-function getCloneUrl(repository: WorkspaceManifest["repositories"][number]): string {
-  return repository.remotes.find((remote) => remote.name === repository.cloneRemote)!.url;
+function getCloneUrl(repository: WorkspaceManifest["repositories"][number], cloneRemote = repository.cloneRemote): string {
+  return repository.remotes.find((remote) => remote.name === cloneRemote)!.url;
 }
 
 async function exists(filePath: string): Promise<boolean> {

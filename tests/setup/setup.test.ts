@@ -110,7 +110,7 @@ describe("setupWorkspace", () => {
     };
 
     await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toMatchObject({
-      failed: ["missing (clone)"],
+      failed: ["missing (clone remote origin)"],
     });
     await expect(access(path.join(temporaryDirectory, "work", "working", ".git"))).resolves.toBeUndefined();
     await expect(access(path.join(temporaryDirectory, "work", "missing"))).rejects.toThrow();
@@ -141,6 +141,38 @@ describe("setupWorkspace", () => {
     });
     await expect(access(path.join(temporaryDirectory, "work", "panel", ".git"))).resolves.toBeUndefined();
     expect(progress).toContain("Failed to configure remote invalid remote for panel.");
+  });
+
+  it("retries a failed clone with a selected fallback remote", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const fallback = path.join(temporaryDirectory, "fallback.git");
+    await execa("git", ["init", "--bare", fallback]);
+    const manifest: WorkspaceManifest = {
+      schemaVersion: 3,
+      name: "work",
+      directories: [],
+      repositories: [{
+        name: "panel",
+        path: "panel",
+        cloneRemote: "origin",
+        remotes: [
+          { name: "origin", url: path.join(temporaryDirectory, "missing.git") },
+          { name: "upstream", url: fallback },
+        ],
+      }],
+    };
+    const changes: string[] = [];
+
+    await expect(setupWorkspace(manifest, temporaryDirectory, () => {}, {
+      selectFallbackRemote: async () => manifest.repositories[0]!.remotes[1],
+      onCloneRemoteChanged: (repository, remote) => {
+        manifest.repositories.find((candidate) => candidate.path === repository.path)!.cloneRemote = remote.name;
+        changes.push(remote.name);
+      },
+    })).resolves.toEqual({ cloned: ["panel"], skipped: [] });
+    expect(changes).toEqual(["upstream"]);
+    expect(manifest.repositories[0]!.cloneRemote).toBe("upstream");
+    await expect(execa("git", ["-C", path.join(temporaryDirectory, "work", "panel"), "remote", "get-url", "origin"])).resolves.toMatchObject({ stdout: path.join(temporaryDirectory, "missing.git") });
   });
 
   it("rejects unsafe manifest paths before creating the workspace", async () => {
