@@ -3,8 +3,8 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 8 — Make path semantics explicit.
-- **Next action:** review scanner and workspace path boundaries for portable manifest serialization and native setup resolution.
+- **Current step:** 9 — Improve doctor semantics.
+- **Next action:** inspect the doctor model, command presentation, and manifest version hints.
 - **Last reviewed:** 2026-08-30.
 - **Baseline:** working tree contains the audit changes from completed Steps 1–3, plus this task document and `.ai/ongoing/README.md` as untracked files.
 
@@ -179,3 +179,10 @@
 - Setup clones a root repository directly into the workspace root without pre-creating that target; root repositories cannot coexist with child repositories or structural directories.
 - Added root-only scanner/setup/manifest coverage, including a root repository with a normal child directory that scanning intentionally excludes.
 - Passed focused scanner/setup/manifest tests (28 tests) and `npm run build` on 2026-08-30.
+
+### Step 8 — Make path semantics explicit (complete)
+
+- Added `toManifestPath` to the shared workspace path boundary. Scanner now uses it to serialize filesystem-relative paths as POSIX manifest paths.
+- Manifest paths continue to validate before setup resolves them within the native workspace root.
+- Added portable coverage for Windows-style filesystem input, POSIX output, safe resolution, and backslash/traversal rejection.
+- Passed focused scanner/manifest tests (24 tests) and `npm run build` on 2026-08-30.

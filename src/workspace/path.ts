@@ -21,3 +21,10 @@ export function resolveManifestPath(root: string, manifestPath: string): string 
   }
   return resolved;
 }
+
+export function toManifestPath(root: string, filesystemPath: string): string {
+  const relative = path.relative(root, filesystemPath).replaceAll("\\", "/");
+  if (!relative) return ".";
+  assertManifestPath(relative);
+  return relative;
+}

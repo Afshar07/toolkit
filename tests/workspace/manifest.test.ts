@@ -3,6 +3,7 @@ import os from "node:os";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
 import { findWorkspaceManifests, readManifest } from "../../src/workspace/manifest.js";
+import { resolveManifestPath, toManifestPath } from "../../src/workspace/path.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -14,7 +15,7 @@ describe("findWorkspaceManifests", () => {
   it("returns only compatible workspace manifests in the selected directory", async () => {
     const directory = await makeTemporaryDirectory();
     await writeFile(path.join(directory, "work.workspace.json"), JSON.stringify({
-       schemaVersion: 3,
+      schemaVersion: 3,
       name: "work",
       repositories: [],
       directories: [],
@@ -24,17 +25,17 @@ describe("findWorkspaceManifests", () => {
 
     await expect(findWorkspaceManifests(directory)).resolves.toEqual([{
       path: path.join(directory, "work.workspace.json").replaceAll("\\", "/"),
-       manifest: { schemaVersion: 3, name: "work", repositories: [], directories: [] },
+      manifest: { schemaVersion: 3, name: "work", repositories: [], directories: [] },
     }]);
   });
 });
 
 describe("readManifest", () => {
-  it("reads schema version 2 repositories with named remotes and clone selection", async () => {
+  it("reads schema version 3 repositories with named remotes and clone selection", async () => {
     const directory = await makeTemporaryDirectory();
     const filePath = path.join(directory, "work.workspace.json");
     const manifest = {
-       schemaVersion: 3,
+      schemaVersion: 3,
       name: "work",
       directories: [],
       repositories: [{
@@ -85,6 +86,21 @@ describe("readManifest", () => {
     await writeFile(filePath, JSON.stringify({ schemaVersion: 3, name: "work", rootRepository, repositories: [], directories: [] }));
 
     await expect(readManifest(filePath)).resolves.toMatchObject({ rootRepository });
+  });
+});
+
+describe("manifest path boundary", () => {
+  it("serializes native paths as POSIX manifest paths", () => {
+    expect(toManifestPath("C:\\work", "C:\\work\\apps\\panel")).toBe("apps/panel");
+  });
+
+  it("resolves POSIX manifest paths within the workspace", () => {
+    expect(resolveManifestPath("C:\\work", "apps/panel")).toBe(path.resolve("C:\\work", "apps", "panel"));
+  });
+
+  it("rejects backslash and traversal manifest paths", () => {
+    expect(() => resolveManifestPath("C:\\work", "apps\\panel")).toThrow("POSIX");
+    expect(() => resolveManifestPath("C:\\work", "../panel")).toThrow("parent-directory");
   });
 });
 

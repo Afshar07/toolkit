@@ -2,6 +2,7 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
 import type { GitRemote, PackageManager, Repository, RootRepository, WorkspaceManifest } from "../workspace/manifest.js";
+import { toManifestPath } from "../workspace/path.js";
 export type { GitRemote } from "../workspace/manifest.js";
 
 const ignoredDirectoryNames = new Set([".git", "node_modules", ".nuxt", "dist", ".idea", ".vscode", ".cache"]);
@@ -145,9 +146,4 @@ async function detectNodeVersion(directory: string): Promise<string | undefined>
     }
   } catch { /* No readable package.json node hint. */ }
   return undefined;
-}
-
-function toManifestPath(root: string, directory: string): string {
-  const relativePath = path.relative(root, directory);
-  return relativePath ? relativePath.split(path.sep).join("/") : ".";
 }
