@@ -3,8 +3,8 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 4 — Preserve all Git remotes with an explicit clone remote.
-- **Next action:** inspect scanner, manifest, setup, and command paths to design the schema-versioned remote model.
+- **Current step:** 5 — Add optional CLI values while retaining prompts.
+- **Next action:** consult current Citty documentation, then inspect command arguments and prompt boundaries.
 - **Last reviewed:** 2026-08-30.
 - **Baseline:** working tree contains the audit changes from completed Steps 1–3, plus this task document and `.ai/ongoing/README.md` as untracked files.
 
@@ -111,7 +111,7 @@
 | Decision | Status | Rationale |
 | --- | --- | --- |
 | `directories` represents standalone empty structural paths | Complete 2026-08-30 | These paths are useful when not implied by repository parents and never represent source or backup content. |
-| Repository remote model gets a schema bump | Planned Step 4 | Persisted repository shape changes. |
+| Repository remote model gets a schema bump | Complete 2026-08-30 | Schema version 2 records named remotes and a selected `cloneRemote`. |
 | Root repository representation | Pending Step 7 | Must reconcile root support with non-root path validation safely. |
 | Version-range comparison strategy | Pending Step 9 | Must be conservative and based on verified library/API behavior. |
 | Use `pathe` for all path operations | Complete 2026-08-30 | Audited source and tests; replaced the remaining `node:path` imports in filesystem/Git test fixtures. |
@@ -148,3 +148,11 @@
 - `readManifest` distinguishes malformed JSON from structurally invalid manifests with the manifest path in the error; `writeManifest` also refuses invalid persisted data.
 - Added malformed/malicious manifest coverage and setup validation-before-creation coverage.
 - Passed focused manifest tests (10 tests), focused setup tests (6 tests), `npm test` (24 tests), and `npm run build` on 2026-08-30.
+
+### Step 4 — Preserve all Git remotes with an explicit clone remote (complete)
+
+- Bumped the persisted manifest to schema version 2. Each repository now stores named `remotes` and the selected `cloneRemote`; version 1 manifests are intentionally unsupported without migration.
+- Scanner persists every discovered remote, automatically chooses `origin`, automatically uses a sole non-origin remote, and invokes selection only for multiple remotes without `origin`.
+- Setup clones from the selected remote URL using its preserved name, restores every other named remote, and validates existing worktrees against the selected remote.
+- Updated the scan prompt to describe the only ambiguous selection case and documented the schema model in the architecture contract.
+- Passed focused scanner tests (4 tests), focused manifest tests (12 tests), focused setup tests (6 tests), `npm test` (28 tests), and `npm run build` on 2026-08-30.

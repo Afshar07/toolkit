@@ -4,16 +4,22 @@ import { assertManifestPath } from "./path.js";
 
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
+export interface GitRemote {
+  name: string;
+  url: string;
+}
+
 export interface Repository {
   name: string;
   path: string;
-  remote: string;
+  cloneRemote: string;
+  remotes: GitRemote[];
   packageManager?: PackageManager;
   nodeVersion?: string;
 }
 
 export interface WorkspaceManifest {
-  schemaVersion: 1;
+  schemaVersion: 2;
   name: string;
   repositories: Repository[];
   directories: string[];
@@ -53,11 +59,11 @@ export async function findWorkspaceManifests(directory: string): Promise<Array<{
 
 export function assertWorkspaceManifest(value: unknown, filePath?: string): asserts value is WorkspaceManifest {
   const prefix = filePath ? `Invalid workspace manifest ${filePath}` : "Invalid workspace manifest";
-  if (!isRecord(value) || value.schemaVersion !== 1 || !isNonEmptyString(value.name)) {
-    throw new Error(`${prefix}: schemaVersion must be 1 and name must be non-empty`);
+  if (!isRecord(value) || value.schemaVersion !== 2 || !isNonEmptyString(value.name)) {
+    throw new Error(`${prefix}: schemaVersion must be 2 and name must be non-empty`);
   }
   if (!Array.isArray(value.repositories) || !value.repositories.every(isRepository)) {
-    throw new Error(`${prefix}: repositories must contain valid repositories with non-empty names and remotes`);
+    throw new Error(`${prefix}: repositories must contain valid repositories with non-empty names, remotes, and clone selections`);
   }
   if (!Array.isArray(value.directories) || !value.directories.every((directory) => typeof directory === "string")) {
     throw new Error(`${prefix}: directories must be an array of paths`);
@@ -86,9 +92,18 @@ function isRepository(value: unknown): value is Repository {
   return isRecord(value)
     && isNonEmptyString(value.name)
     && typeof value.path === "string"
-    && isNonEmptyString(value.remote)
+    && isNonEmptyString(value.cloneRemote)
+    && Array.isArray(value.remotes)
+    && value.remotes.length > 0
+    && value.remotes.every(isGitRemote)
+    && new Set(value.remotes.map((remote) => remote.name)).size === value.remotes.length
+    && value.remotes.some((remote) => remote.name === value.cloneRemote)
     && (value.packageManager === undefined || ["npm", "pnpm", "yarn", "bun"].includes(value.packageManager as string))
     && (value.nodeVersion === undefined || typeof value.nodeVersion === "string");
+}
+
+function isGitRemote(value: unknown): value is GitRemote {
+  return isRecord(value) && isNonEmptyString(value.name) && isNonEmptyString(value.url);
 }
 
 function isNonEmptyString(value: unknown): value is string {

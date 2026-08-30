@@ -26,12 +26,16 @@ describe("scanWorkspace", () => {
     await mkdir(path.join(workspace, "node_modules"));
 
     await expect(scanWorkspace(workspace)).resolves.toEqual({
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: path.basename(workspace),
       repositories: [{
         name: "panel",
         path: "apps/panel",
-        remote: "https://example.test/panel.git",
+        cloneRemote: "origin",
+        remotes: [
+          { name: "origin", url: "https://example.test/panel.git" },
+          { name: "upstream", url: "https://example.test/upstream.git" },
+        ],
         packageManager: "pnpm",
         nodeVersion: "22",
       }],
@@ -39,7 +43,7 @@ describe("scanWorkspace", () => {
     });
   });
 
-  it("uses the remote selected by the caller when a repository has multiple remotes", async () => {
+  it("uses origin without prompting and preserves every remote", async () => {
     const workspace = await makeWorkspace();
     const repository = path.join(workspace, "panel");
     await mkdir(repository);
@@ -47,14 +51,45 @@ describe("scanWorkspace", () => {
     await execa("git", ["remote", "add", "origin", "https://example.test/panel.git"], { cwd: repository });
     await execa("git", ["remote", "add", "upstream", "https://example.test/upstream.git"], { cwd: repository });
 
+    const manifest = await scanWorkspace(workspace, { selectRemote: async () => { throw new Error("should not prompt"); } });
+
+    expect(manifest.repositories[0]).toMatchObject({
+      cloneRemote: "origin",
+      remotes: [
+        { name: "origin", url: "https://example.test/panel.git" },
+        { name: "upstream", url: "https://example.test/upstream.git" },
+      ],
+    });
+  });
+
+  it("uses the caller selection when multiple remotes have no origin", async () => {
+    const workspace = await makeWorkspace();
+    const repository = path.join(workspace, "panel");
+    await mkdir(repository);
+    await execa("git", ["init"], { cwd: repository });
+    await execa("git", ["remote", "add", "fork", "https://example.test/fork.git"], { cwd: repository });
+    await execa("git", ["remote", "add", "upstream", "https://example.test/upstream.git"], { cwd: repository });
+
     const manifest = await scanWorkspace(workspace, {
       selectRemote: async (candidate) => candidate.remotes.find((remote) => remote.name === "upstream"),
     });
 
-    expect(manifest.repositories[0]?.remote).toBe("https://example.test/upstream.git");
+    expect(manifest.repositories[0]?.cloneRemote).toBe("upstream");
   });
 
-  it("does not include repositories without an origin remote", async () => {
+  it("uses a sole non-origin remote without prompting", async () => {
+    const workspace = await makeWorkspace();
+    const repository = path.join(workspace, "panel");
+    await mkdir(repository);
+    await execa("git", ["init"], { cwd: repository });
+    await execa("git", ["remote", "add", "upstream", "https://example.test/upstream.git"], { cwd: repository });
+
+    await expect(scanWorkspace(workspace)).resolves.toMatchObject({
+      repositories: [{ cloneRemote: "upstream", remotes: [{ name: "upstream", url: "https://example.test/upstream.git" }] }],
+    });
+  });
+
+  it("does not include repositories without remotes", async () => {
     const workspace = await makeWorkspace();
     const repository = path.join(workspace, "local-only");
     await mkdir(repository);

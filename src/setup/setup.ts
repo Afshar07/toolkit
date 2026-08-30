@@ -46,7 +46,7 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
   for (const repository of manifest.repositories) {
     const target = resolveManifestPath(root, repository.path);
     if (await exists(target)) {
-      const conflict = await inspectDestination(target, repository.remote);
+      const conflict = await inspectDestination(target, repository.cloneRemote, getCloneUrl(repository));
       if (conflict) {
         onProgress(`Conflict at ${repository.path}: ${conflict}.`);
         conflicts.push({ path: repository.path, reason: conflict });
@@ -67,10 +67,14 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
       const target = resolveManifestPath(root, repository.path);
       let createdTarget = false;
       try {
-        onProgress(`Cloning ${repository.remote} into ${repository.path}...`);
+        const cloneUrl = getCloneUrl(repository);
+        onProgress(`Cloning ${cloneUrl} into ${repository.path}...`);
         await mkdir(target);
         createdTarget = true;
-        await execa("git", ["clone", repository.remote, target], { stdio: "inherit" });
+        await execa("git", ["clone", "--origin", repository.cloneRemote, cloneUrl, target], { stdio: "inherit" });
+        await Promise.all(repository.remotes
+          .filter((remote) => remote.name !== repository.cloneRemote)
+          .map((remote) => execa("git", ["-C", target, "remote", "add", remote.name, remote.url])));
         onProgress(`Cloned ${repository.path}.`);
         cloned.push(repository.path);
       } catch {
@@ -85,7 +89,7 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
   return { cloned, skipped };
 }
 
-async function inspectDestination(target: string, expectedRemote: string): Promise<string | undefined> {
+async function inspectDestination(target: string, remoteName: string, expectedRemote: string): Promise<string | undefined> {
   try {
     const { stdout: isWorktree } = await execa("git", ["-C", target, "rev-parse", "--is-inside-work-tree"]);
     if (isWorktree.trim() !== "true") return "destination is not a Git worktree";
@@ -94,11 +98,15 @@ async function inspectDestination(target: string, expectedRemote: string): Promi
   }
 
   try {
-    const { stdout: remote } = await execa("git", ["-C", target, "remote", "get-url", "origin"]);
-    if (remote.trim() !== expectedRemote) return "origin remote does not match the manifest";
+    const { stdout: remote } = await execa("git", ["-C", target, "remote", "get-url", remoteName]);
+    if (remote.trim() !== expectedRemote) return `${remoteName} remote does not match the manifest`;
   } catch {
-    return "origin remote does not match the manifest";
+    return `${remoteName} remote does not match the manifest`;
   }
+}
+
+function getCloneUrl(repository: WorkspaceManifest["repositories"][number]): string {
+  return repository.remotes.find((remote) => remote.name === repository.cloneRemote)!.url;
 }
 
 async function exists(filePath: string): Promise<boolean> {

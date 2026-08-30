@@ -18,10 +18,10 @@ describe("setupWorkspace", () => {
     const remote = path.join(temporaryDirectory, "panel.git");
     await execa("git", ["init", "--bare", remote]);
     const manifest: WorkspaceManifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "work",
       directories: ["notes", "infrastructure/templates"],
-      repositories: [{ name: "panel", path: "apps/panel", remote }],
+      repositories: [{ name: "panel", path: "apps/panel", cloneRemote: "origin", remotes: [{ name: "origin", url: remote }, { name: "upstream", url: "https://example.test/upstream.git" }] }],
     };
 
     const result = await setupWorkspace(manifest, temporaryDirectory, () => {});
@@ -30,6 +30,7 @@ describe("setupWorkspace", () => {
     await expect(access(path.join(temporaryDirectory, "work", "notes"))).resolves.toBeUndefined();
     await expect(access(path.join(temporaryDirectory, "work", "infrastructure", "templates"))).resolves.toBeUndefined();
     await expect(access(path.join(temporaryDirectory, "work", "apps", "panel", ".git"))).resolves.toBeUndefined();
+    await expect(execa("git", ["-C", path.join(temporaryDirectory, "work", "apps", "panel"), "remote", "get-url", "upstream"])).resolves.toMatchObject({ stdout: "https://example.test/upstream.git" });
   });
 
   it("skips an existing Git worktree with a matching origin remote", async () => {
@@ -37,10 +38,10 @@ describe("setupWorkspace", () => {
     const remote = path.join(temporaryDirectory, "panel.git");
     await execa("git", ["init", "--bare", remote]);
     const manifest: WorkspaceManifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "work",
       directories: [],
-      repositories: [{ name: "panel", path: "panel", remote }],
+      repositories: [{ name: "panel", path: "panel", cloneRemote: "origin", remotes: [{ name: "origin", url: remote }] }],
     };
     await execa("git", ["clone", remote, path.join(temporaryDirectory, "work", "panel")]);
 
@@ -79,12 +80,12 @@ describe("setupWorkspace", () => {
     const remote = path.join(temporaryDirectory, "working.git");
     await execa("git", ["init", "--bare", remote]);
     const manifest: WorkspaceManifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "work",
       directories: [],
       repositories: [
-        { name: "missing", path: "missing", remote: path.join(temporaryDirectory, "missing.git") },
-        { name: "working", path: "working", remote },
+        { name: "missing", path: "missing", cloneRemote: "origin", remotes: [{ name: "origin", url: path.join(temporaryDirectory, "missing.git") }] },
+        { name: "working", path: "working", cloneRemote: "origin", remotes: [{ name: "origin", url: remote }] },
       ],
     };
 
@@ -95,7 +96,7 @@ describe("setupWorkspace", () => {
   it("rejects unsafe manifest paths before creating the workspace", async () => {
     const temporaryDirectory = await makeTemporaryDirectory();
     const manifest = {
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "work",
       directories: ["../outside"],
       repositories: [],
@@ -108,10 +109,10 @@ describe("setupWorkspace", () => {
 
 function makeManifest(remote: string): WorkspaceManifest {
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: "work",
     directories: [],
-    repositories: [{ name: "panel", path: "panel", remote }],
+    repositories: [{ name: "panel", path: "panel", cloneRemote: "origin", remotes: [{ name: "origin", url: remote }] }],
   };
 }
 

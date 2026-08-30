@@ -30,7 +30,7 @@ export const scanCommand = defineCommand({
     const manifest = await scanWorkspace(workspacePath, {
       selectRemote: async (repository) => {
         const remoteName = await prompts.select({
-          message: `${repository.path} has multiple remotes. Which should Toolkit use?`,
+          message: `${repository.path} has multiple remotes without an origin. Which should Toolkit clone?`,
           options: repository.remotes.map((remote) => ({ value: remote.name, label: remote.name, hint: remote.url })),
         });
         if (prompts.isCancel(remoteName)) cancelled();

@@ -1,7 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
-import type { PackageManager, Repository, WorkspaceManifest } from "../workspace/manifest.js";
+import type { GitRemote, PackageManager, Repository, WorkspaceManifest } from "../workspace/manifest.js";
+export type { GitRemote } from "../workspace/manifest.js";
 
 const ignoredDirectoryNames = new Set([".git", "node_modules", ".nuxt", "dist", ".idea", ".vscode", ".cache"]);
 const lockfiles: ReadonlyArray<readonly [string, PackageManager]> = [
@@ -13,12 +14,7 @@ const lockfiles: ReadonlyArray<readonly [string, PackageManager]> = [
   ["npm-shrinkwrap.json", "npm"],
 ];
 
-export interface GitRemote {
-  name: string;
-  url: string;
-}
-
-export interface RepositoryCandidate extends Omit<Repository, "remote"> {
+export interface RepositoryCandidate extends Omit<Repository, "cloneRemote" | "remotes"> {
   remotes: GitRemote[];
 }
 
@@ -38,16 +34,15 @@ export async function scanWorkspace(target: string, options: ScanOptions = {}): 
   const repositories: Repository[] = [];
 
   for (const candidate of candidates.sort((a, b) => a.path.localeCompare(b.path))) {
-    const remote = candidate.remotes.length > 1 && options.selectRemote
-      ? await options.selectRemote(candidate)
-      : candidate.remotes[0];
+    const remote = candidate.remotes.find((remote) => remote.name === "origin")
+      ?? (candidate.remotes.length === 1 ? candidate.remotes[0] : await options.selectRemote?.(candidate));
     if (!remote) continue;
     const { remotes: _, ...repository } = candidate;
-    repositories.push({ ...repository, remote: remote.url });
+    repositories.push({ ...repository, cloneRemote: remote.name, remotes: candidate.remotes });
   }
 
   return {
-    schemaVersion: 1,
+    schemaVersion: 2,
     name: path.basename(root),
     repositories,
     directories,

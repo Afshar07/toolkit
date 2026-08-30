@@ -14,7 +14,7 @@ describe("findWorkspaceManifests", () => {
   it("returns only compatible workspace manifests in the selected directory", async () => {
     const directory = await makeTemporaryDirectory();
     await writeFile(path.join(directory, "work.workspace.json"), JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       name: "work",
       repositories: [],
       directories: [],
@@ -24,12 +24,34 @@ describe("findWorkspaceManifests", () => {
 
     await expect(findWorkspaceManifests(directory)).resolves.toEqual([{
       path: path.join(directory, "work.workspace.json").replaceAll("\\", "/"),
-      manifest: { schemaVersion: 1, name: "work", repositories: [], directories: [] },
+      manifest: { schemaVersion: 2, name: "work", repositories: [], directories: [] },
     }]);
   });
 });
 
 describe("readManifest", () => {
+  it("reads schema version 2 repositories with named remotes and clone selection", async () => {
+    const directory = await makeTemporaryDirectory();
+    const filePath = path.join(directory, "work.workspace.json");
+    const manifest = {
+      schemaVersion: 2,
+      name: "work",
+      directories: [],
+      repositories: [{
+        name: "panel",
+        path: "apps/panel",
+        cloneRemote: "upstream",
+        remotes: [
+          { name: "origin", url: "https://example.test/panel.git" },
+          { name: "upstream", url: "https://example.test/upstream.git" },
+        ],
+      }],
+    };
+    await writeFile(filePath, JSON.stringify(manifest));
+
+    await expect(readManifest(filePath)).resolves.toEqual(manifest);
+  });
+
   it.each([
     ["empty workspace name", { schemaVersion: 1, name: "", repositories: [], directories: [] }],
     ["empty repository remote", { schemaVersion: 1, name: "work", repositories: [{ name: "panel", path: "panel", remote: " " }], directories: [] }],
@@ -39,6 +61,7 @@ describe("readManifest", () => {
     ["duplicate repository paths", { schemaVersion: 1, name: "work", repositories: [{ name: "one", path: "apps/panel", remote: "https://example.test/one.git" }, { name: "two", path: "apps/panel", remote: "https://example.test/two.git" }], directories: [] }],
     ["overlapping repository paths", { schemaVersion: 1, name: "work", repositories: [{ name: "one", path: "apps", remote: "https://example.test/one.git" }, { name: "two", path: "apps/panel", remote: "https://example.test/two.git" }], directories: [] }],
     ["directory repository collision", { schemaVersion: 1, name: "work", repositories: [{ name: "panel", path: "apps/panel", remote: "https://example.test/panel.git" }], directories: ["apps"] }],
+    ["unknown clone remote", { schemaVersion: 2, name: "work", repositories: [{ name: "panel", path: "panel", cloneRemote: "upstream", remotes: [{ name: "origin", url: "https://example.test/panel.git" }] }], directories: [] }],
   ])("rejects a manifest with %s", async (_reason, manifest) => {
     const directory = await makeTemporaryDirectory();
     const filePath = path.join(directory, "work.workspace.json");
