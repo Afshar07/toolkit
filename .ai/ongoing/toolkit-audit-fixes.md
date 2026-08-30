@@ -3,8 +3,8 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 2 — Define `directories`.
-- **Next action:** inspect scanner traversal and existing scanner/setup tests.
+- **Current step:** 3 — Strengthen manifest validation.
+- **Next action:** inspect manifest parsing and setup path resolution for shared validation boundaries.
 - **Last reviewed:** 2026-08-30.
 - **Baseline:** working tree contains this task document and `.ai/ongoing/README.md` as untracked files; no source changes have been made for this audit.
 
@@ -110,7 +110,7 @@
 
 | Decision | Status | Rationale |
 | --- | --- | --- |
-| `directories` remains only if standalone structural paths are representable and useful | Pending Step 2 | Avoid misleading backup-like manifest data. |
+| `directories` represents standalone empty structural paths | Complete 2026-08-30 | These paths are useful when not implied by repository parents and never represent source or backup content. |
 | Repository remote model gets a schema bump | Planned Step 4 | Persisted repository shape changes. |
 | Root repository representation | Pending Step 7 | Must reconcile root support with non-root path validation safely. |
 | Version-range comparison strategy | Pending Step 9 | Must be conservative and based on verified library/API behavior. |
@@ -133,3 +133,10 @@
 - Clone targets are explicitly created before cloning, so failure cleanup removes only a target created by this setup run. Other clones continue with the existing three-worker bound.
 - Added setup coverage for matching remote skips, non-Git conflicts, wrong-remote conflicts, and missing-target clones.
 - Passed `npm test -- tests/setup/setup.test.ts` (5 tests), `npm test` (9 tests), and `npm run build` on 2026-08-30.
+
+### Step 2 — Define `directories` (complete)
+
+- `directories` represents standalone, empty structural directories only. Repository paths and their parent directories are excluded because setup creates repository parents as needed.
+- Scanner traversal now records nested empty structural directories and stops at Git repositories, so repository contents are never treated as structural directories.
+- Added coverage for a nested repository path plus a nested standalone directory; setup coverage now verifies nested structural-directory creation alongside automatic repository-parent creation.
+- Passed `npm test -- tests/scanner/scan.test.ts` (3 tests), `npm test -- tests/setup/setup.test.ts` (5 tests), and `npm run build` on 2026-08-30.

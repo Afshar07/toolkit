@@ -22,6 +22,7 @@ describe("scanWorkspace", () => {
     await writeFile(path.join(repository, "pnpm-lock.yaml"), "lockfileVersion: '9.0'\n");
     await writeFile(path.join(repository, ".nvmrc"), "22\n");
     await mkdir(path.join(workspace, "notes"));
+    await mkdir(path.join(workspace, "infrastructure", "templates"), { recursive: true });
     await mkdir(path.join(workspace, "node_modules"));
 
     await expect(scanWorkspace(workspace)).resolves.toEqual({
@@ -34,7 +35,7 @@ describe("scanWorkspace", () => {
         packageManager: "pnpm",
         nodeVersion: "22",
       }],
-      directories: ["apps", "notes"],
+      directories: ["infrastructure/templates", "notes"],
     });
   });
 

@@ -13,14 +13,14 @@ afterEach(async () => {
 });
 
 describe("setupWorkspace", () => {
-  it("creates normal directories and clones missing repositories into relative paths", async () => {
+  it("creates standalone structural directories and repository parents", async () => {
     const temporaryDirectory = await makeTemporaryDirectory();
     const remote = path.join(temporaryDirectory, "panel.git");
     await execa("git", ["init", "--bare", remote]);
     const manifest: WorkspaceManifest = {
       schemaVersion: 1,
       name: "work",
-      directories: ["notes"],
+      directories: ["notes", "infrastructure/templates"],
       repositories: [{ name: "panel", path: "apps/panel", remote }],
     };
 
@@ -28,6 +28,7 @@ describe("setupWorkspace", () => {
 
     expect(result).toEqual({ cloned: ["apps/panel"], skipped: [] });
     await expect(access(path.join(temporaryDirectory, "work", "notes"))).resolves.toBeUndefined();
+    await expect(access(path.join(temporaryDirectory, "work", "infrastructure", "templates"))).resolves.toBeUndefined();
     await expect(access(path.join(temporaryDirectory, "work", "apps", "panel", ".git"))).resolves.toBeUndefined();
   });
 

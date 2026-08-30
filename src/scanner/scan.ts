@@ -34,7 +34,7 @@ export async function scanWorkspace(target: string, options: ScanOptions = {}): 
 
   const candidates: RepositoryCandidate[] = [];
   await findRepositories(root, root, candidates);
-  const directories = await findTopLevelDirectories(root);
+  const directories = await findStructuralDirectories(root, new Set(candidates.map((candidate) => candidate.path)));
   const repositories: Repository[] = [];
 
   for (const candidate of candidates.sort((a, b) => a.path.localeCompare(b.path))) {
@@ -76,14 +76,28 @@ async function findRepositories(root: string, current: string, repositories: Rep
   }
 }
 
-async function findTopLevelDirectories(root: string): Promise<string[]> {
+async function findStructuralDirectories(root: string, repositoryPaths: ReadonlySet<string>): Promise<string[]> {
   const directories: string[] = [];
-  for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (!entry.isDirectory() || entry.isSymbolicLink() || ignoredDirectoryNames.has(entry.name)) continue;
-    const fullPath = path.join(root, entry.name);
-    if (!(await isGitRepository(fullPath))) directories.push(entry.name);
-  }
+  await findStructuralDirectoriesIn(root, root, repositoryPaths, directories);
   return directories.sort();
+}
+
+async function findStructuralDirectoriesIn(root: string, current: string, repositoryPaths: ReadonlySet<string>, directories: string[]): Promise<void> {
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink() || ignoredDirectoryNames.has(entry.name)) continue;
+    const directory = path.join(current, entry.name);
+    const manifestPath = toManifestPath(root, directory);
+    if (repositoryPaths.has(manifestPath) || await isGitRepository(directory)) continue;
+
+    const contents = (await readdir(directory, { withFileTypes: true }))
+      .filter((child) => !ignoredDirectoryNames.has(child.name));
+    if (contents.length === 0) {
+      directories.push(manifestPath);
+      continue;
+    }
+
+    await findStructuralDirectoriesIn(root, directory, repositoryPaths, directories);
+  }
 }
 
 async function isGitRepository(directory: string): Promise<boolean> {
