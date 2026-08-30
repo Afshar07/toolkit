@@ -3,6 +3,7 @@ import os from "node:os";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
 import { AiContextSetupError, defaultAiContextOptions, setupAiContext } from "../../src/context/setup.js";
+import { OpenCodeAgentSetupError, setupOpenCodeAgents } from "../../src/context/agents.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -67,6 +68,33 @@ describe("setupAiContext", () => {
 
     await expect(access(path.join(directory, ".ai", "projects", "outside-project.md"))).resolves.toBeUndefined();
     await expect(access(path.join(directory, "Outside Project.md"))).rejects.toThrow();
+  });
+});
+
+describe("setupOpenCodeAgents", () => {
+  it("creates the four personal OpenCode agent files", async () => {
+    const directory = await makeTemporaryDirectory();
+
+    await expect(setupOpenCodeAgents(directory)).resolves.toEqual([
+      "lead.md",
+      "researcher.md",
+      "external-researcher.md",
+      "coder.md",
+    ]);
+    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("mode: primary");
+    await expect(readFile(path.join(directory, "researcher.md"), "utf8")).resolves.toContain("read-only code researcher");
+    await expect(readFile(path.join(directory, "external-researcher.md"), "utf8")).resolves.toContain("webfetch: allow");
+    await expect(readFile(path.join(directory, "coder.md"), "utf8")).resolves.toContain("edit: allow");
+  });
+
+  it("does not overwrite any existing personal agent", async () => {
+    const directory = await makeTemporaryDirectory();
+    const leadPath = path.join(directory, "lead.md");
+    await writeFile(leadPath, "existing lead");
+
+    await expect(setupOpenCodeAgents(directory)).rejects.toBeInstanceOf(OpenCodeAgentSetupError);
+    await expect(readFile(leadPath, "utf8")).resolves.toBe("existing lead");
+    await expect(access(path.join(directory, "coder.md"))).rejects.toThrow();
   });
 });
 

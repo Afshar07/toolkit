@@ -7,6 +7,7 @@ toolkit scan
 toolkit setup
 toolkit doctor --workspace workspace.json
 toolkit context --setup
+toolkit context --agents
 ```
 
 `scan` writes a human-readable `workspace.json` describing cloneable Git repositories, their relative paths, package-manager lockfile hints, Node-version hints, and top-level normal directories. It ignores generated, sensitive, and machine-specific directories such as `.git`, `node_modules`, `.nuxt`, `dist`, and IDE caches.
@@ -16,3 +17,5 @@ toolkit context --setup
 `scan` interactively asks for the workspace directory, workspace name, and output location, each with a useful default. When a repository has multiple Git remotes, it asks which one should be used to recreate it.
 
 `context --setup` interactively creates an `AGENTS.md` entry point and a routed `.ai/` context system in the current directory. It asks for the workspace name and purpose plus the primary project scope, then refuses to proceed if `AGENTS.md` or `.ai/` already exists.
+
+`context --agents` interactively creates the personal `lead`, `researcher`, `external-researcher`, and `coder` OpenCode agents either for the current workspace or globally. It refuses to overwrite an existing agent file.

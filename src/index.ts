@@ -1,6 +1,7 @@
 export { checkPrerequisites } from "./doctor/doctor.js";
 export { defaultAiContextOptions, setupAiContext, AiContextSetupError } from "./context/setup.js";
 export type { AiContextOptions } from "./context/setup.js";
+export { setupOpenCodeAgents, OpenCodeAgentSetupError } from "./context/agents.js";
 export { scanWorkspace } from "./scanner/scan.js";
 export type { GitRemote, RepositoryCandidate, ScanOptions } from "./scanner/scan.js";
 export { setupWorkspace, setupWorkspaceAt, WorkspaceSetupError } from "./setup/setup.js";
