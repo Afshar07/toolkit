@@ -3,8 +3,8 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 6 — Stop swallowing unexpected scanner errors.
-- **Next action:** inspect Git repository detection and remote-discovery failure handling.
+- **Current step:** 7 — Clarify root repository behavior.
+- **Next action:** decide the root-repository manifest representation, then inspect scanner and setup handling.
 - **Last reviewed:** 2026-08-30.
 - **Baseline:** working tree contains the audit changes from completed Steps 1–3, plus this task document and `.ai/ongoing/README.md` as untracked files.
 
@@ -164,3 +164,10 @@
 - Supplied values bypass only their matching text prompt. Overwrite confirmation, final safety confirmation, and ambiguous remote selection remain interactive.
 - Added small command-value resolution helpers with focused prompt-bypass/default tests.
 - Passed `npm test -- tests/commands/values.test.ts` (4 tests), `npm test` (32 tests), and `npm run build` on 2026-08-30.
+
+### Step 6 — Stop swallowing unexpected scanner errors (complete)
+
+- Git marker detection now treats only `ENOENT` as an absent `.git` marker; other filesystem failures include the marker path and propagate.
+- Remote discovery now propagates Git failures with the repository path. A successful Git remote query remains the only path that returns an empty remote list.
+- Added coverage for inaccessible Git markers and corrupt Git metadata.
+- Passed `npm test -- tests/scanner/scan.test.ts` (7 tests), `npm test` (34 tests), and `npm run build` on 2026-08-30.

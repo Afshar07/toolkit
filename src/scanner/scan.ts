@@ -96,11 +96,12 @@ async function findStructuralDirectoriesIn(root: string, current: string, reposi
 }
 
 async function isGitRepository(directory: string): Promise<boolean> {
+  const gitPath = path.join(directory, ".git");
   try {
-    const gitPath = path.join(directory, ".git");
     return (await stat(gitPath)).isDirectory() || (await stat(gitPath)).isFile();
-  } catch {
-    return false;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw new Error(`Unable to inspect Git marker at ${gitPath}`, { cause: error });
   }
 }
 
@@ -112,8 +113,8 @@ async function getGitRemotes(directory: string): Promise<GitRemote[]> {
       return { name, url };
     }));
     return remotes.sort((a, b) => (a.name === "origin" ? -1 : b.name === "origin" ? 1 : a.name.localeCompare(b.name)));
-  } catch {
-    return [];
+  } catch (error) {
+    throw new Error(`Unable to discover Git remotes for ${directory}`, { cause: error });
   }
 }
 

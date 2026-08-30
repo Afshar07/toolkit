@@ -1,13 +1,30 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { execa } from "execa";
 import { scanWorkspace } from "../../src/scanner/scan.js";
 
 const temporaryDirectories: string[] = [];
+const inaccessibleGitMarkers = vi.hoisted(() => new Set<string>());
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:fs/promises")>();
+  return {
+    ...original,
+    stat: async (target: string | Buffer | URL) => {
+      if (typeof target === "string" && inaccessibleGitMarkers.has(target)) {
+        const error = new Error("Access denied") as NodeJS.ErrnoException;
+        error.code = "EACCES";
+        throw error;
+      }
+      return original.stat(target);
+    },
+  };
+});
 
 afterEach(async () => {
+  inaccessibleGitMarkers.clear();
   await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true })));
 });
 
@@ -99,6 +116,24 @@ describe("scanWorkspace", () => {
 
     expect(manifest.repositories).toEqual([]);
     expect(manifest.directories).toEqual([]);
+  });
+
+  it("reports inaccessible Git markers instead of treating them as absent", async () => {
+    const workspace = await makeWorkspace();
+    const repository = path.join(workspace, "panel");
+    await mkdir(repository);
+    inaccessibleGitMarkers.add(path.join(repository, ".git"));
+
+    await expect(scanWorkspace(workspace)).rejects.toThrow(`Unable to inspect Git marker at ${path.join(repository, ".git")}`);
+  });
+
+  it("reports corrupt repositories instead of silently omitting them", async () => {
+    const workspace = await makeWorkspace();
+    const repository = path.join(workspace, "panel");
+    await mkdir(repository);
+    await writeFile(path.join(repository, ".git"), "not a gitdir\n");
+
+    await expect(scanWorkspace(workspace)).rejects.toThrow(`Unable to discover Git remotes for ${repository}`);
   });
 });
 
