@@ -1,7 +1,8 @@
 import { access, mkdir, rm } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
-import type { WorkspaceManifest } from "../workspace/manifest.js";
+import { assertWorkspaceManifest, type WorkspaceManifest } from "../workspace/manifest.js";
+import { resolveManifestPath } from "../workspace/path.js";
 
 export interface SetupResult {
   cloned: string[];
@@ -25,10 +26,12 @@ export class WorkspaceSetupError extends Error {
 const cloneConcurrency = 3;
 
 export async function setupWorkspace(manifest: WorkspaceManifest, destination: string, onProgress: (message: string) => void): Promise<SetupResult> {
+  assertWorkspaceManifest(manifest);
   return setupWorkspaceAt(manifest, path.join(destination, manifest.name), onProgress);
 }
 
 export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination: string, onProgress: (message: string) => void): Promise<SetupResult> {
+  assertWorkspaceManifest(manifest);
   const root = path.resolve(destination);
   await mkdir(root, { recursive: true });
   const cloned: string[] = [];
@@ -37,11 +40,11 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
   const conflicts: SetupConflict[] = [];
 
   for (const directory of manifest.directories) {
-    await mkdir(resolveInside(root, directory), { recursive: true });
+    await mkdir(resolveManifestPath(root, directory), { recursive: true });
   }
 
   for (const repository of manifest.repositories) {
-    const target = resolveInside(root, repository.path);
+    const target = resolveManifestPath(root, repository.path);
     if (await exists(target)) {
       const conflict = await inspectDestination(target, repository.remote);
       if (conflict) {
@@ -61,7 +64,7 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
   await Promise.all(Array.from({ length: Math.min(cloneConcurrency, pending.length) }, async () => {
     while (pending.length > 0) {
       const repository = pending.shift()!;
-      const target = resolveInside(root, repository.path);
+      const target = resolveManifestPath(root, repository.path);
       let createdTarget = false;
       try {
         onProgress(`Cloning ${repository.remote} into ${repository.path}...`);
@@ -96,18 +99,6 @@ async function inspectDestination(target: string, expectedRemote: string): Promi
   } catch {
     return "origin remote does not match the manifest";
   }
-}
-
-function resolveInside(root: string, manifestPath: string): string {
-  const normalized = path.normalize(manifestPath);
-  if (normalized === "." || normalized === ".." || normalized.startsWith("../") || path.isAbsolute(normalized)) {
-    throw new Error(`Manifest path must be a non-root relative path: ${manifestPath}`);
-  }
-  const resolved = path.resolve(root, ...normalized.split("/"));
-  if (path.relative(root, resolved).startsWith("..") || path.isAbsolute(path.relative(root, resolved))) {
-    throw new Error(`Manifest path escapes workspace: ${manifestPath}`);
-  }
-  return resolved;
 }
 
 async function exists(filePath: string): Promise<boolean> {

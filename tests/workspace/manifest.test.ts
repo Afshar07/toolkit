@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
-import { findWorkspaceManifests } from "../../src/workspace/manifest.js";
+import { findWorkspaceManifests, readManifest } from "../../src/workspace/manifest.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -26,6 +26,33 @@ describe("findWorkspaceManifests", () => {
       path: path.join(directory, "work.workspace.json").replaceAll("\\", "/"),
       manifest: { schemaVersion: 1, name: "work", repositories: [], directories: [] },
     }]);
+  });
+});
+
+describe("readManifest", () => {
+  it.each([
+    ["empty workspace name", { schemaVersion: 1, name: "", repositories: [], directories: [] }],
+    ["empty repository remote", { schemaVersion: 1, name: "work", repositories: [{ name: "panel", path: "panel", remote: " " }], directories: [] }],
+    ["absolute repository path", { schemaVersion: 1, name: "work", repositories: [{ name: "panel", path: "/panel", remote: "https://example.test/panel.git" }], directories: [] }],
+    ["parent traversal", { schemaVersion: 1, name: "work", repositories: [{ name: "panel", path: "../panel", remote: "https://example.test/panel.git" }], directories: [] }],
+    ["Windows directory path", { schemaVersion: 1, name: "work", repositories: [], directories: ["notes\\private"] }],
+    ["duplicate repository paths", { schemaVersion: 1, name: "work", repositories: [{ name: "one", path: "apps/panel", remote: "https://example.test/one.git" }, { name: "two", path: "apps/panel", remote: "https://example.test/two.git" }], directories: [] }],
+    ["overlapping repository paths", { schemaVersion: 1, name: "work", repositories: [{ name: "one", path: "apps", remote: "https://example.test/one.git" }, { name: "two", path: "apps/panel", remote: "https://example.test/two.git" }], directories: [] }],
+    ["directory repository collision", { schemaVersion: 1, name: "work", repositories: [{ name: "panel", path: "apps/panel", remote: "https://example.test/panel.git" }], directories: ["apps"] }],
+  ])("rejects a manifest with %s", async (_reason, manifest) => {
+    const directory = await makeTemporaryDirectory();
+    const filePath = path.join(directory, "work.workspace.json");
+    await writeFile(filePath, JSON.stringify(manifest));
+
+    await expect(readManifest(filePath)).rejects.toThrow("Invalid workspace manifest");
+  });
+
+  it("reports malformed JSON clearly", async () => {
+    const directory = await makeTemporaryDirectory();
+    const filePath = path.join(directory, "broken.workspace.json");
+    await writeFile(filePath, "{");
+
+    await expect(readManifest(filePath)).rejects.toThrow("invalid JSON");
   });
 });
 

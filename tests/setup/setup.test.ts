@@ -91,6 +91,19 @@ describe("setupWorkspace", () => {
     await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toBeInstanceOf(WorkspaceSetupError);
     await expect(access(path.join(temporaryDirectory, "work", "working", ".git"))).resolves.toBeUndefined();
   });
+
+  it("rejects unsafe manifest paths before creating the workspace", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const manifest = {
+      schemaVersion: 1,
+      name: "work",
+      directories: ["../outside"],
+      repositories: [],
+    } as WorkspaceManifest;
+
+    await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toThrow("parent-directory");
+    await expect(access(path.join(temporaryDirectory, "work"))).rejects.toThrow();
+  });
 });
 
 function makeManifest(remote: string): WorkspaceManifest {

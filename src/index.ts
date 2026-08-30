@@ -4,5 +4,6 @@ export type { AiContextOptions } from "./context/setup.js";
 export { scanWorkspace } from "./scanner/scan.js";
 export type { GitRemote, RepositoryCandidate, ScanOptions } from "./scanner/scan.js";
 export { setupWorkspace, setupWorkspaceAt, WorkspaceSetupError } from "./setup/setup.js";
-export { findWorkspaceManifests, readManifest, writeManifest } from "./workspace/manifest.js";
+export { assertWorkspaceManifest, findWorkspaceManifests, readManifest, writeManifest } from "./workspace/manifest.js";
+export { assertManifestPath, resolveManifestPath } from "./workspace/path.js";
 export type { PackageManager, Repository, WorkspaceManifest } from "./workspace/manifest.js";

@@ -3,10 +3,10 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 3 — Strengthen manifest validation.
-- **Next action:** inspect manifest parsing and setup path resolution for shared validation boundaries.
+- **Current step:** 4 — Preserve all Git remotes with an explicit clone remote.
+- **Next action:** inspect scanner, manifest, setup, and command paths to design the schema-versioned remote model.
 - **Last reviewed:** 2026-08-30.
-- **Baseline:** working tree contains this task document and `.ai/ongoing/README.md` as untracked files; no source changes have been made for this audit.
+- **Baseline:** working tree contains the audit changes from completed Steps 1–3, plus this task document and `.ai/ongoing/README.md` as untracked files.
 
 ## Scope and guardrails
 
@@ -140,3 +140,11 @@
 - Scanner traversal now records nested empty structural directories and stops at Git repositories, so repository contents are never treated as structural directories.
 - Added coverage for a nested repository path plus a nested standalone directory; setup coverage now verifies nested structural-directory creation alongside automatic repository-parent creation.
 - Passed `npm test -- tests/scanner/scan.test.ts` (3 tests), `npm test -- tests/setup/setup.test.ts` (5 tests), and `npm run build` on 2026-08-30.
+
+### Step 3 — Strengthen manifest validation (complete)
+
+- Added shared POSIX manifest-path validation and safe native filesystem resolution in `src/workspace/path.ts`; setup now validates its input before creating anything and uses the shared resolver.
+- Manifest validation now requires non-empty workspace/repository names and remotes, rejects root, absolute, traversal, backslash, and malformed paths, rejects duplicate/overlapping repository paths, and rejects directory/repository collisions.
+- `readManifest` distinguishes malformed JSON from structurally invalid manifests with the manifest path in the error; `writeManifest` also refuses invalid persisted data.
+- Added malformed/malicious manifest coverage and setup validation-before-creation coverage.
+- Passed focused manifest tests (10 tests), focused setup tests (6 tests), `npm test` (24 tests), and `npm run build` on 2026-08-30.
