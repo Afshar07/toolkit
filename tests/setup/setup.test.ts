@@ -48,6 +48,26 @@ describe("setupWorkspace", () => {
     await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).resolves.toEqual({ cloned: [], skipped: ["panel"] });
   });
 
+  it("skips an existing linked worktree with a matching origin remote", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const remote = path.join(temporaryDirectory, "panel.git");
+    const source = path.join(temporaryDirectory, "source");
+    const checkout = path.join(temporaryDirectory, "checkout");
+    const target = path.join(temporaryDirectory, "work", "panel");
+    await execa("git", ["init", "--bare", remote]);
+    await execa("git", ["init", source]);
+    await execa("git", ["-C", source, "config", "user.email", "test@example.test"]);
+    await execa("git", ["-C", source, "config", "user.name", "Test"]);
+    await execa("git", ["-C", source, "commit", "--allow-empty", "-m", "initial"]);
+    await execa("git", ["-C", source, "remote", "add", "origin", remote]);
+    await execa("git", ["-C", source, "push", "origin", "HEAD"]);
+    await execa("git", ["clone", remote, checkout]);
+    await execa("git", ["-C", checkout, "worktree", "add", target]);
+
+    await expect(setupWorkspace(makeManifest(remote), temporaryDirectory, () => {})).resolves.toEqual({ cloned: [], skipped: ["panel"] });
+    await expect(access(path.join(target, ".git"))).resolves.toBeUndefined();
+  });
+
   it("reports a non-Git destination as a conflict without modifying it", async () => {
     const temporaryDirectory = await makeTemporaryDirectory();
     const target = path.join(temporaryDirectory, "work", "panel");
@@ -91,6 +111,7 @@ describe("setupWorkspace", () => {
 
     await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toBeInstanceOf(WorkspaceSetupError);
     await expect(access(path.join(temporaryDirectory, "work", "working", ".git"))).resolves.toBeUndefined();
+    await expect(access(path.join(temporaryDirectory, "work", "missing"))).rejects.toThrow();
   });
 
   it("rejects unsafe manifest paths before creating the workspace", async () => {

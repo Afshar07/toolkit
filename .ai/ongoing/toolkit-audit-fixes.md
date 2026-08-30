@@ -3,8 +3,8 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 9 — Improve doctor semantics.
-- **Next action:** inspect the doctor model, command presentation, and manifest version hints.
+- **Current step:** 11 — Dependency and scope review.
+- **Next action:** review changed modules, dependencies, layering, and documentation before final verification.
 - **Last reviewed:** 2026-08-30.
 - **Baseline:** working tree contains the audit changes from completed Steps 1–3, plus this task document and `.ai/ongoing/README.md` as untracked files.
 
@@ -113,7 +113,7 @@
 | `directories` represents standalone empty structural paths | Complete 2026-08-30 | These paths are useful when not implied by repository parents and never represent source or backup content. |
 | Repository remote model gets a schema bump | Complete 2026-08-30 | Schema version 2 records named remotes and a selected `cloneRemote`. |
 | Root repository representation | Complete 2026-08-30 | Schema version 3 adds an optional `rootRepository` object without a path; it cannot coexist with child repositories or structural directories. |
-| Version-range comparison strategy | Pending Step 9 | Must be conservative and based on verified library/API behavior. |
+| Version-range comparison strategy | Complete 2026-08-30 | Doctor compares only exact `v?major.minor.patch` Node hints after stripping `v`; it reports non-exact ranges as available without interpreting them. |
 | Use `pathe` for all path operations | Complete 2026-08-30 | Audited source and tests; replaced the remaining `node:path` imports in filesystem/Git test fixtures. |
 
 ## Resume checklist
@@ -186,3 +186,16 @@
 - Manifest paths continue to validate before setup resolves them within the native workspace root.
 - Added portable coverage for Windows-style filesystem input, POSIX output, safe resolution, and backslash/traversal rejection.
 - Passed focused scanner/manifest tests (24 tests) and `npm run build` on 2026-08-30.
+
+### Step 9 — Improve doctor semantics (complete)
+
+- Doctor now reports `available`, `missing`, and `incompatible` tool statuses. It retains Git, Node, package-manager, and root-repository checks.
+- Exact Node version hints are compared conservatively; non-exact ranges are intentionally not parsed. The command presents incompatible-version expectations concisely and exits nonzero for non-available statuses.
+- Added focused doctor coverage for available, missing, incompatible, and range-hint behavior.
+- Passed `npm test -- tests/doctor/doctor.test.ts` (4 tests) and `npm run build` on 2026-08-30.
+
+### Step 10 — Strengthen safety-critical tests (complete)
+
+- Reviewed the required safety coverage and added the missing linked-worktree (`.git` file) destination case plus an assertion that failed clone targets are removed.
+- Existing coverage retains traversal, absolute and Windows-style paths, duplicates, malformed manifests, destination conflicts, nested/root repositories, and scanner Git failures.
+- Passed focused setup tests (8 tests), `npm test` (45 tests), and `npm run build` on 2026-08-30.
