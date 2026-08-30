@@ -19,6 +19,19 @@
   ],
   "routes": [
     {
+      "id": "architecture",
+      "kind": "architecture",
+      "scope": "Toolkit source layout, module boundaries, and setup safety constraints.",
+      "readWhen": [
+        "Changing source layout, module boundaries, CLI integration, manifests, scanning, setup, or doctor behavior."
+      ],
+      "read": [
+        ".ai/projects/architecture.md"
+      ],
+      "authority": "authoritative",
+      "status": "active"
+    },
+    {
       "id": "engineering-conventions",
       "kind": "policy",
       "scope": "Shared coding, documentation, and verification conventions.",

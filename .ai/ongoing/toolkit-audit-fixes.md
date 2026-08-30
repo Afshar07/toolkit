@@ -118,7 +118,7 @@
 
 ## Resume checklist
 
-1. Read this file and `.ai/architecture.md`.
+1. Read this file and `.ai/projects/architecture.md`.
 2. Confirm the current step and working-tree status.
 3. Read the listed source and test files for that step.
 4. Implement only that step, add its focused tests, and record commands/results below.
