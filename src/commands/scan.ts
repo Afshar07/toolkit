@@ -4,23 +4,31 @@ import { existsSync, statSync } from "node:fs";
 import * as path from "pathe";
 import { scanWorkspace } from "../scanner/scan.js";
 import { writeManifest } from "../workspace/manifest.js";
+import { resolveScanValues } from "./values.js";
 
 export const scanCommand = defineCommand({
   meta: { name: "scan", description: "Create a portable workspace manifest" },
-  async run() {
+  args: {
+    workspace: { type: "positional", description: "Workspace directory to scan", required: false },
+    name: { type: "string", description: "Workspace recipe name" },
+    output: { type: "string", description: "Output manifest path" },
+  },
+  async run({ args }) {
     prompts.intro("Create a workspace recipe");
-    const workspace = await askText("Which workspace should Toolkit scan?", process.cwd(), (value) => {
-      try {
-        return statSync(path.resolve(value ?? "")).isDirectory() ? undefined : "Enter a directory path.";
-      } catch {
-        return "That directory does not exist.";
-      }
+    const { workspace, name, output } = await resolveScanValues(args, {
+      workspace: () => askText("Which workspace should Toolkit scan?", process.cwd(), (value) => {
+        try {
+          return statSync(path.resolve(value ?? "")).isDirectory() ? undefined : "Enter a directory path.";
+        } catch {
+          return "That directory does not exist.";
+        }
+      }),
+      name: (selectedWorkspace) => askText("What should this workspace be called?", path.basename(path.resolve(selectedWorkspace))),
+      output: (selectedName) => askText("Where should Toolkit save the recipe?", path.join(process.cwd(), `${selectedName}.workspace.json`), (value) => {
+        return existsSync(path.dirname(path.resolve(value ?? ""))) ? undefined : "Its parent directory does not exist.";
+      }),
     });
     const workspacePath = path.resolve(workspace);
-    const name = await askText("What should this workspace be called?", path.basename(workspacePath));
-    const output = await askText("Where should Toolkit save the recipe?", path.join(process.cwd(), `${name}.workspace.json`), (value) => {
-      return existsSync(path.dirname(path.resolve(value ?? ""))) ? undefined : "Its parent directory does not exist.";
-    });
 
     if (existsSync(output) && !await askConfirm(`${output} already exists. Replace it?`, false)) cancelled();
     if (!await askConfirm("Scan this workspace and create the recipe?", true)) cancelled();

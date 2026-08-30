@@ -3,6 +3,7 @@ import * as prompts from "@clack/prompts";
 import * as path from "pathe";
 import { setupWorkspaceAt, WorkspaceSetupError } from "../setup/setup.js";
 import { findWorkspaceManifests, readManifest } from "../workspace/manifest.js";
+import { resolveSetupValues } from "./values.js";
 
 export const setupCommand = defineCommand({
   meta: { name: "setup", description: "Recreate a workspace from a manifest" },
@@ -12,22 +13,29 @@ export const setupCommand = defineCommand({
       description: "Workspace manifest file",
       required: false,
     },
+    destination: {
+      type: "string",
+      description: "Destination directory",
+    },
   },
   async run({ args }) {
     prompts.intro("Recreate a workspace");
-    const selected = args.workspace
-      ? {
-          path: path.resolve(args.workspace),
-          manifest: await readManifest(path.resolve(args.workspace)),
-        }
-      : await selectManifest();
-    const destination = await prompts.text({
-      message: `Where should Toolkit create ${selected.manifest.name}?`,
-      initialValue: path.join(process.cwd(), selected.manifest.name),
-      validate: (value) =>
-        value?.trim() ? undefined : "Enter a destination directory.",
+    const { workspace: selected, destination } = await resolveSetupValues(args, {
+      workspace: selectManifest,
+      parseWorkspace: async (workspace) => {
+        const manifestPath = path.resolve(workspace);
+        return { path: manifestPath, manifest: await readManifest(manifestPath) };
+      },
+      destination: async (workspace) => {
+        const value = await prompts.text({
+          message: `Where should Toolkit create ${workspace.manifest.name}?`,
+          initialValue: path.join(process.cwd(), workspace.manifest.name),
+          validate: (value) => value?.trim() ? undefined : "Enter a destination directory.",
+        });
+        if (prompts.isCancel(value)) cancelled();
+        return value;
+      },
     });
-    if (prompts.isCancel(destination)) cancelled();
     if (!(await confirm(`Create ${selected.manifest.name} at ${destination}?`)))
       cancelled();
 

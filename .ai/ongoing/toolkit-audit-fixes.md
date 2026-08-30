@@ -3,8 +3,8 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 5 — Add optional CLI values while retaining prompts.
-- **Next action:** consult current Citty documentation, then inspect command arguments and prompt boundaries.
+- **Current step:** 6 — Stop swallowing unexpected scanner errors.
+- **Next action:** inspect Git repository detection and remote-discovery failure handling.
 - **Last reviewed:** 2026-08-30.
 - **Baseline:** working tree contains the audit changes from completed Steps 1–3, plus this task document and `.ai/ongoing/README.md` as untracked files.
 
@@ -156,3 +156,11 @@
 - Setup clones from the selected remote URL using its preserved name, restores every other named remote, and validates existing worktrees against the selected remote.
 - Updated the scan prompt to describe the only ambiguous selection case and documented the schema model in the architecture contract.
 - Passed focused scanner tests (4 tests), focused manifest tests (12 tests), focused setup tests (6 tests), `npm test` (28 tests), and `npm run build` on 2026-08-30.
+
+### Step 5 — Add optional CLI values while retaining prompts (complete)
+
+- Consulted Citty's current argument documentation and verified that optional positionals use `type: "positional"` with `required: false`, while optional named values use `type: "string"`.
+- Scan now accepts an optional workspace positional plus `--name` and `--output`; setup retains its optional manifest positional and now accepts `--destination`.
+- Supplied values bypass only their matching text prompt. Overwrite confirmation, final safety confirmation, and ambiguous remote selection remain interactive.
+- Added small command-value resolution helpers with focused prompt-bypass/default tests.
+- Passed `npm test -- tests/commands/values.test.ts` (4 tests), `npm test` (32 tests), and `npm run build` on 2026-08-30.
