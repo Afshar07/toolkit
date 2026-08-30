@@ -1,7 +1,7 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
-import type { GitRemote, PackageManager, Repository, WorkspaceManifest } from "../workspace/manifest.js";
+import type { GitRemote, PackageManager, Repository, RootRepository, WorkspaceManifest } from "../workspace/manifest.js";
 export type { GitRemote } from "../workspace/manifest.js";
 
 const ignoredDirectoryNames = new Set([".git", "node_modules", ".nuxt", "dist", ".idea", ".vscode", ".cache"]);
@@ -30,27 +30,34 @@ export async function scanWorkspace(target: string, options: ScanOptions = {}): 
 
   const candidates: RepositoryCandidate[] = [];
   await findRepositories(root, root, candidates);
-  const directories = await findStructuralDirectories(root, new Set(candidates.map((candidate) => candidate.path)));
+  const rootCandidate = candidates.find((candidate) => candidate.path === ".");
+  const directories = rootCandidate ? [] : await findStructuralDirectories(root, new Set(candidates.map((candidate) => candidate.path)));
   const repositories: Repository[] = [];
+  let rootRepository: RootRepository | undefined;
 
   for (const candidate of candidates.sort((a, b) => a.path.localeCompare(b.path))) {
     const remote = candidate.remotes.find((remote) => remote.name === "origin")
       ?? (candidate.remotes.length === 1 ? candidate.remotes[0] : await options.selectRemote?.(candidate));
     if (!remote) continue;
     const { remotes: _, ...repository } = candidate;
-    repositories.push({ ...repository, cloneRemote: remote.name, remotes: candidate.remotes });
+    const completeRepository = { ...repository, cloneRemote: remote.name, remotes: candidate.remotes };
+    if (candidate.path === ".") {
+      const { path: _, ...root } = completeRepository;
+      rootRepository = root;
+    } else repositories.push(completeRepository);
   }
 
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     name: path.basename(root),
+    rootRepository,
     repositories,
     directories,
   };
 }
 
 async function findRepositories(root: string, current: string, repositories: RepositoryCandidate[]): Promise<void> {
-  if (current !== root && await isGitRepository(current)) {
+  if (await isGitRepository(current)) {
     const remotes = await getGitRemotes(current);
     if (remotes.length > 0) {
       repositories.push({

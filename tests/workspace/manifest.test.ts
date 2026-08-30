@@ -14,7 +14,7 @@ describe("findWorkspaceManifests", () => {
   it("returns only compatible workspace manifests in the selected directory", async () => {
     const directory = await makeTemporaryDirectory();
     await writeFile(path.join(directory, "work.workspace.json"), JSON.stringify({
-      schemaVersion: 2,
+       schemaVersion: 3,
       name: "work",
       repositories: [],
       directories: [],
@@ -24,7 +24,7 @@ describe("findWorkspaceManifests", () => {
 
     await expect(findWorkspaceManifests(directory)).resolves.toEqual([{
       path: path.join(directory, "work.workspace.json").replaceAll("\\", "/"),
-      manifest: { schemaVersion: 2, name: "work", repositories: [], directories: [] },
+       manifest: { schemaVersion: 3, name: "work", repositories: [], directories: [] },
     }]);
   });
 });
@@ -34,7 +34,7 @@ describe("readManifest", () => {
     const directory = await makeTemporaryDirectory();
     const filePath = path.join(directory, "work.workspace.json");
     const manifest = {
-      schemaVersion: 2,
+       schemaVersion: 3,
       name: "work",
       directories: [],
       repositories: [{
@@ -61,7 +61,7 @@ describe("readManifest", () => {
     ["duplicate repository paths", { schemaVersion: 1, name: "work", repositories: [{ name: "one", path: "apps/panel", remote: "https://example.test/one.git" }, { name: "two", path: "apps/panel", remote: "https://example.test/two.git" }], directories: [] }],
     ["overlapping repository paths", { schemaVersion: 1, name: "work", repositories: [{ name: "one", path: "apps", remote: "https://example.test/one.git" }, { name: "two", path: "apps/panel", remote: "https://example.test/two.git" }], directories: [] }],
     ["directory repository collision", { schemaVersion: 1, name: "work", repositories: [{ name: "panel", path: "apps/panel", remote: "https://example.test/panel.git" }], directories: ["apps"] }],
-    ["unknown clone remote", { schemaVersion: 2, name: "work", repositories: [{ name: "panel", path: "panel", cloneRemote: "upstream", remotes: [{ name: "origin", url: "https://example.test/panel.git" }] }], directories: [] }],
+    ["unknown clone remote", { schemaVersion: 3, name: "work", repositories: [{ name: "panel", path: "panel", cloneRemote: "upstream", remotes: [{ name: "origin", url: "https://example.test/panel.git" }] }], directories: [] }],
   ])("rejects a manifest with %s", async (_reason, manifest) => {
     const directory = await makeTemporaryDirectory();
     const filePath = path.join(directory, "work.workspace.json");
@@ -76,6 +76,15 @@ describe("readManifest", () => {
     await writeFile(filePath, "{");
 
     await expect(readManifest(filePath)).rejects.toThrow("invalid JSON");
+  });
+
+  it("accepts an explicit root repository", async () => {
+    const directory = await makeTemporaryDirectory();
+    const filePath = path.join(directory, "work.workspace.json");
+    const rootRepository = { name: "work", cloneRemote: "origin", remotes: [{ name: "origin", url: "https://example.test/work.git" }] };
+    await writeFile(filePath, JSON.stringify({ schemaVersion: 3, name: "work", rootRepository, repositories: [], directories: [] }));
+
+    await expect(readManifest(filePath)).resolves.toMatchObject({ rootRepository });
   });
 });
 

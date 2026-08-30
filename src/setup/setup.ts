@@ -33,18 +33,22 @@ export async function setupWorkspace(manifest: WorkspaceManifest, destination: s
 export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination: string, onProgress: (message: string) => void): Promise<SetupResult> {
   assertWorkspaceManifest(manifest);
   const root = path.resolve(destination);
-  await mkdir(root, { recursive: true });
   const cloned: string[] = [];
   const skipped: string[] = [];
   const pending = [] as typeof manifest.repositories;
   const conflicts: SetupConflict[] = [];
 
+  const repositories = manifest.rootRepository
+    ? [{ ...manifest.rootRepository, path: "." }, ...manifest.repositories]
+    : manifest.repositories;
+
   for (const directory of manifest.directories) {
+    await mkdir(root, { recursive: true });
     await mkdir(resolveManifestPath(root, directory), { recursive: true });
   }
 
-  for (const repository of manifest.repositories) {
-    const target = resolveManifestPath(root, repository.path);
+  for (const repository of repositories) {
+    const target = repository.path === "." ? root : resolveManifestPath(root, repository.path);
     if (await exists(target)) {
       const conflict = await inspectDestination(target, repository.cloneRemote, getCloneUrl(repository));
       if (conflict) {
@@ -64,7 +68,7 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
   await Promise.all(Array.from({ length: Math.min(cloneConcurrency, pending.length) }, async () => {
     while (pending.length > 0) {
       const repository = pending.shift()!;
-      const target = resolveManifestPath(root, repository.path);
+        const target = repository.path === "." ? root : resolveManifestPath(root, repository.path);
       let createdTarget = false;
       try {
         const cloneUrl = getCloneUrl(repository);

@@ -18,9 +18,12 @@ export interface Repository {
   nodeVersion?: string;
 }
 
+export type RootRepository = Omit<Repository, "path">;
+
 export interface WorkspaceManifest {
-  schemaVersion: 2;
+  schemaVersion: 3;
   name: string;
+  rootRepository?: RootRepository;
   repositories: Repository[];
   directories: string[];
 }
@@ -59,9 +62,10 @@ export async function findWorkspaceManifests(directory: string): Promise<Array<{
 
 export function assertWorkspaceManifest(value: unknown, filePath?: string): asserts value is WorkspaceManifest {
   const prefix = filePath ? `Invalid workspace manifest ${filePath}` : "Invalid workspace manifest";
-  if (!isRecord(value) || value.schemaVersion !== 2 || !isNonEmptyString(value.name)) {
-    throw new Error(`${prefix}: schemaVersion must be 2 and name must be non-empty`);
+  if (!isRecord(value) || value.schemaVersion !== 3 || !isNonEmptyString(value.name)) {
+    throw new Error(`${prefix}: schemaVersion must be 3 and name must be non-empty`);
   }
+  if (value.rootRepository !== undefined && !isRootRepository(value.rootRepository)) throw new Error(`${prefix}: rootRepository must be valid when provided`);
   if (!Array.isArray(value.repositories) || !value.repositories.every(isRepository)) {
     throw new Error(`${prefix}: repositories must contain valid repositories with non-empty names, remotes, and clone selections`);
   }
@@ -86,13 +90,24 @@ export function assertWorkspaceManifest(value: unknown, filePath?: string): asse
   if (value.directories.some((directory) => repositoryPaths.some((repository) => pathsCollide(directory, repository)))) {
     throw new Error(`${prefix}: directories must not overlap repository paths`);
   }
+  if (value.rootRepository && (value.repositories.length > 0 || value.directories.length > 0)) {
+    throw new Error(`${prefix}: rootRepository cannot be combined with repositories or directories`);
+  }
 }
 
 function isRepository(value: unknown): value is Repository {
   return isRecord(value)
     && isNonEmptyString(value.name)
     && typeof value.path === "string"
-    && isNonEmptyString(value.cloneRemote)
+    && isRepositoryDetails(value);
+}
+
+function isRootRepository(value: unknown): value is RootRepository {
+  return isRecord(value) && isNonEmptyString(value.name) && isRepositoryDetails(value);
+}
+
+function isRepositoryDetails(value: Record<string, unknown>): boolean {
+  return isNonEmptyString(value.cloneRemote)
     && Array.isArray(value.remotes)
     && value.remotes.length > 0
     && value.remotes.every(isGitRemote)

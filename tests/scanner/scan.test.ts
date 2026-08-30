@@ -43,7 +43,7 @@ describe("scanWorkspace", () => {
     await mkdir(path.join(workspace, "node_modules"));
 
     await expect(scanWorkspace(workspace)).resolves.toEqual({
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: path.basename(workspace),
       repositories: [{
         name: "panel",
@@ -116,6 +116,20 @@ describe("scanWorkspace", () => {
 
     expect(manifest.repositories).toEqual([]);
     expect(manifest.directories).toEqual([]);
+  });
+
+  it("represents a root repository explicitly and does not scan its contents", async () => {
+    const workspace = await makeWorkspace();
+    await execa("git", ["init"], { cwd: workspace });
+    await execa("git", ["remote", "add", "origin", "https://example.test/work.git"], { cwd: workspace });
+    await mkdir(path.join(workspace, "notes"));
+
+    await expect(scanWorkspace(workspace)).resolves.toMatchObject({
+      schemaVersion: 3,
+      rootRepository: { name: path.basename(workspace), cloneRemote: "origin" },
+      repositories: [],
+      directories: [],
+    });
   });
 
   it("reports inaccessible Git markers instead of treating them as absent", async () => {

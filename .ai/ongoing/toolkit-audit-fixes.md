@@ -3,8 +3,8 @@
 ## Session state
 
 - **Status:** in progress.
-- **Current step:** 7 — Clarify root repository behavior.
-- **Next action:** decide the root-repository manifest representation, then inspect scanner and setup handling.
+- **Current step:** 8 — Make path semantics explicit.
+- **Next action:** review scanner and workspace path boundaries for portable manifest serialization and native setup resolution.
 - **Last reviewed:** 2026-08-30.
 - **Baseline:** working tree contains the audit changes from completed Steps 1–3, plus this task document and `.ai/ongoing/README.md` as untracked files.
 
@@ -112,7 +112,7 @@
 | --- | --- | --- |
 | `directories` represents standalone empty structural paths | Complete 2026-08-30 | These paths are useful when not implied by repository parents and never represent source or backup content. |
 | Repository remote model gets a schema bump | Complete 2026-08-30 | Schema version 2 records named remotes and a selected `cloneRemote`. |
-| Root repository representation | Pending Step 7 | Must reconcile root support with non-root path validation safely. |
+| Root repository representation | Complete 2026-08-30 | Schema version 3 adds an optional `rootRepository` object without a path; it cannot coexist with child repositories or structural directories. |
 | Version-range comparison strategy | Pending Step 9 | Must be conservative and based on verified library/API behavior. |
 | Use `pathe` for all path operations | Complete 2026-08-30 | Audited source and tests; replaced the remaining `node:path` imports in filesystem/Git test fixtures. |
 
@@ -171,3 +171,11 @@
 - Remote discovery now propagates Git failures with the repository path. A successful Git remote query remains the only path that returns an empty remote list.
 - Added coverage for inaccessible Git markers and corrupt Git metadata.
 - Passed `npm test -- tests/scanner/scan.test.ts` (7 tests), `npm test` (34 tests), and `npm run build` on 2026-08-30.
+
+### Step 7 — Clarify root repository behavior (complete)
+
+- Bumped the persisted manifest to schema version 3 and added the explicit optional `rootRepository` shape, retaining strict non-root validation for ordinary repository paths.
+- Scanner now detects the workspace root before descendants, records it as `rootRepository`, and does not treat its contents as standalone structural directories.
+- Setup clones a root repository directly into the workspace root without pre-creating that target; root repositories cannot coexist with child repositories or structural directories.
+- Added root-only scanner/setup/manifest coverage, including a root repository with a normal child directory that scanning intentionally excludes.
+- Passed focused scanner/setup/manifest tests (28 tests) and `npm run build` on 2026-08-30.
