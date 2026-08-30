@@ -1,6 +1,6 @@
-import { access, mkdtemp, rm } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
-import path from "node:path";
+import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
 import { execa } from "execa";
 import { setupWorkspace, WorkspaceSetupError } from "../../src/setup/setup.js";
@@ -31,17 +31,46 @@ describe("setupWorkspace", () => {
     await expect(access(path.join(temporaryDirectory, "work", "apps", "panel", ".git"))).resolves.toBeUndefined();
   });
 
-  it("does not overwrite an existing repository destination", async () => {
+  it("skips an existing Git worktree with a matching origin remote", async () => {
     const temporaryDirectory = await makeTemporaryDirectory();
+    const remote = path.join(temporaryDirectory, "panel.git");
+    await execa("git", ["init", "--bare", remote]);
     const manifest: WorkspaceManifest = {
       schemaVersion: 1,
       name: "work",
       directories: [],
-      repositories: [{ name: "panel", path: "panel", remote: "https://example.test/panel.git" }],
+      repositories: [{ name: "panel", path: "panel", remote }],
     };
-    await execa("git", ["init", path.join(temporaryDirectory, "work", "panel")]);
+    await execa("git", ["clone", remote, path.join(temporaryDirectory, "work", "panel")]);
 
     await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).resolves.toEqual({ cloned: [], skipped: ["panel"] });
+  });
+
+  it("reports a non-Git destination as a conflict without modifying it", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const target = path.join(temporaryDirectory, "work", "panel");
+    await execa("git", ["init", "--bare", path.join(temporaryDirectory, "panel.git")]);
+    await mkdir(target, { recursive: true });
+    await writeFile(path.join(target, "keep.txt"), "keep");
+    const manifest = makeManifest(path.join(temporaryDirectory, "panel.git"));
+
+    await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toMatchObject({
+      conflicts: [{ path: "panel", reason: "destination is not a Git worktree" }],
+    });
+    await expect(access(path.join(target, "keep.txt"))).resolves.toBeUndefined();
+  });
+
+  it("reports a Git worktree with a wrong origin remote as a conflict", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const expectedRemote = path.join(temporaryDirectory, "expected.git");
+    const actualRemote = path.join(temporaryDirectory, "actual.git");
+    await execa("git", ["init", "--bare", expectedRemote]);
+    await execa("git", ["init", "--bare", actualRemote]);
+    await execa("git", ["clone", actualRemote, path.join(temporaryDirectory, "work", "panel")]);
+
+    await expect(setupWorkspace(makeManifest(expectedRemote), temporaryDirectory, () => {})).rejects.toMatchObject({
+      conflicts: [{ path: "panel", reason: "origin remote does not match the manifest" }],
+    });
   });
 
   it("continues cloning other repositories when one clone fails", async () => {
@@ -62,6 +91,15 @@ describe("setupWorkspace", () => {
     await expect(access(path.join(temporaryDirectory, "work", "working", ".git"))).resolves.toBeUndefined();
   });
 });
+
+function makeManifest(remote: string): WorkspaceManifest {
+  return {
+    schemaVersion: 1,
+    name: "work",
+    directories: [],
+    repositories: [{ name: "panel", path: "panel", remote }],
+  };
+}
 
 async function makeTemporaryDirectory(): Promise<string> {
   const directory = await mkdtemp(path.join(os.tmpdir(), "toolkit-"));
