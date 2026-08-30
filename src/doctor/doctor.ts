@@ -38,6 +38,7 @@ function repositories(manifest?: WorkspaceManifest) {
 }
 
 function isExactVersion(version: string): boolean {
+  // Version ranges and major-only hints are intentionally advisory, not compatibility constraints.
   return /^v?\d+\.\d+\.\d+$/.test(version);
 }
 

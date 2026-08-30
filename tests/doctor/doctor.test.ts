@@ -26,7 +26,7 @@ describe("checkPrerequisites", () => {
     });
   });
 
-  it("does not attempt to interpret version ranges", async () => {
+  it("treats non-exact Node version hints as advisory", async () => {
     runTool.mockImplementation(async (name) => ({ stdout: name === "node" ? "v20.0.0" : "2.45.0" }) as never);
 
     await expect(checkPrerequisites(manifest(">=22"))).resolves.toContainEqual({ name: "node", status: "available", version: "v20.0.0" });

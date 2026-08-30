@@ -1,21 +1,24 @@
 # @afshar7/toolkit
 
-Create portable recipes for development workspaces containing independent Git repositories.
+Toolkit creates portable **workspace recipes**: declarative manifests for reconstructing workspace structure, not backups of arbitrary local files.
 
 ```sh
 toolkit scan
+toolkit scan .
+toolkit scan . --name trigate
+toolkit scan . --name trigate --output ./trigate.workspace.json
+
 toolkit setup
-toolkit doctor --workspace workspace.json
-toolkit context --setup
-toolkit context --agents
+toolkit setup ./trigate.workspace.json
+toolkit setup ./trigate.workspace.json --destination ~/work
+
+toolkit doctor --workspace ./trigate.workspace.json
 ```
 
-`scan` writes a human-readable `workspace.json` describing cloneable Git repositories, their relative paths, package-manager lockfile hints, Node-version hints, and top-level normal directories. It ignores generated, sensitive, and machine-specific directories such as `.git`, `node_modules`, `.nuxt`, `dist`, and IDE caches.
+`scan` is interactive by default. A supplied workspace, name, or output skips that prompt. It records a root Git repository when the workspace itself is a repository, otherwise discovers child Git repositories using relative paths. Every discovered remote is recorded; `origin` is selected for cloning when available, and Toolkit asks you to choose when multiple remotes exist without an `origin`.
 
-`setup` finds compatible workspace recipes in the current directory (or accepts one as `toolkit setup <manifest>`), then interactively asks where to create the workspace. It creates recorded normal directories and clones only repositories whose destination does not already exist. It does not install dependencies or overwrite files.
+Recipes also record package-manager lockfile hints, Node-version hints, and standalone structural or empty directories where applicable. Generated, sensitive, and machine-specific directories (such as `.git`, `node_modules`, `.nuxt`, `dist`, and IDE caches) are ignored.
 
-`scan` interactively asks for the workspace directory, workspace name, and output location, each with a useful default. When a repository has multiple Git remotes, it asks which one should be used to recreate it.
+`setup` is interactive by default; a supplied manifest or destination skips the matching prompt. It recreates declared directories and clones repositories without installing dependencies. Existing destinations are validated as matching Git repositories and skipped; non-matching repositories or other existing content are reported as conflicts and never overwritten. If a secondary remote cannot be configured, the successful clone is kept and the setup error names the repository and remote.
 
-`context --setup` interactively creates an `AGENTS.md` entry point and a routed `.ai/` context system in the current directory. It asks for the workspace name and purpose plus the primary project scope, then refuses to proceed if `AGENTS.md` or `.ai/` already exists.
-
-`context --agents` interactively creates the personal `lead`, `researcher`, `external-researcher`, and `coder` OpenCode agents either for the current workspace or globally. It refuses to overwrite an existing agent file.
+`doctor` checks Git, Node, and recorded package managers. Node compatibility is checked only for exact `major.minor.patch` hints (with an optional `v`); ranges and major-only hints remain advisory.

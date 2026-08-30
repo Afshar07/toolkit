@@ -3,7 +3,7 @@ import os from "node:os";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
 import { execa } from "execa";
-import { setupWorkspace, WorkspaceSetupError } from "../../src/setup/setup.js";
+import { setupWorkspace } from "../../src/setup/setup.js";
 import type { WorkspaceManifest } from "../../src/workspace/manifest.js";
 
 const temporaryDirectories: string[] = [];
@@ -109,9 +109,38 @@ describe("setupWorkspace", () => {
       ],
     };
 
-    await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toBeInstanceOf(WorkspaceSetupError);
+    await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toMatchObject({
+      failed: ["missing (clone)"],
+    });
     await expect(access(path.join(temporaryDirectory, "work", "working", ".git"))).resolves.toBeUndefined();
     await expect(access(path.join(temporaryDirectory, "work", "missing"))).rejects.toThrow();
+  });
+
+  it("preserves a cloned repository when configuring a secondary remote fails", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const remote = path.join(temporaryDirectory, "panel.git");
+    await execa("git", ["init", "--bare", remote]);
+    const manifest: WorkspaceManifest = {
+      schemaVersion: 3,
+      name: "work",
+      directories: [],
+      repositories: [{
+        name: "panel",
+        path: "panel",
+        cloneRemote: "origin",
+        remotes: [
+          { name: "origin", url: remote },
+          { name: "invalid remote", url: "https://example.test/upstream.git" },
+        ],
+      }],
+    };
+    const progress: string[] = [];
+
+    await expect(setupWorkspace(manifest, temporaryDirectory, (message) => progress.push(message))).rejects.toMatchObject({
+      failed: ["panel (remote invalid remote)"],
+    });
+    await expect(access(path.join(temporaryDirectory, "work", "panel", ".git"))).resolves.toBeUndefined();
+    expect(progress).toContain("Failed to configure remote invalid remote for panel.");
   });
 
   it("rejects unsafe manifest paths before creating the workspace", async () => {

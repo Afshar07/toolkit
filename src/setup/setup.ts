@@ -16,7 +16,7 @@ export interface SetupConflict {
 
 export class WorkspaceSetupError extends Error {
   constructor(readonly failed: string[], readonly conflicts: SetupConflict[] = []) {
-    const failures = failed.length === 0 ? "" : `Failed to clone ${failed.length} ${failed.length === 1 ? "repository" : "repositories"}: ${failed.join(", ")}.`;
+    const failures = failed.length === 0 ? "" : `Setup failed for ${failed.length} ${failed.length === 1 ? "repository" : "repositories"}: ${failed.join(", ")}.`;
     const conflictDetails = conflicts.map((conflict) => `${conflict.path} (${conflict.reason})`).join(", ");
     super([failures, conflictDetails && `Destination conflicts: ${conflictDetails}.`].filter(Boolean).join(" "));
     this.name = "WorkspaceSetupError";
@@ -42,8 +42,8 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
     ? [{ ...manifest.rootRepository, path: "." }, ...manifest.repositories]
     : manifest.repositories;
 
+  if (manifest.directories.length > 0) await mkdir(root, { recursive: true });
   for (const directory of manifest.directories) {
-    await mkdir(root, { recursive: true });
     await mkdir(resolveManifestPath(root, directory), { recursive: true });
   }
 
@@ -68,7 +68,7 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
   await Promise.all(Array.from({ length: Math.min(cloneConcurrency, pending.length) }, async () => {
     while (pending.length > 0) {
       const repository = pending.shift()!;
-        const target = repository.path === "." ? root : resolveManifestPath(root, repository.path);
+      const target = repository.path === "." ? root : resolveManifestPath(root, repository.path);
       let createdTarget = false;
       try {
         const cloneUrl = getCloneUrl(repository);
@@ -76,15 +76,23 @@ export async function setupWorkspaceAt(manifest: WorkspaceManifest, destination:
         await mkdir(target);
         createdTarget = true;
         await execa("git", ["clone", "--origin", repository.cloneRemote, cloneUrl, target], { stdio: "inherit" });
-        await Promise.all(repository.remotes
-          .filter((remote) => remote.name !== repository.cloneRemote)
-          .map((remote) => execa("git", ["-C", target, "remote", "add", remote.name, remote.url])));
         onProgress(`Cloned ${repository.path}.`);
         cloned.push(repository.path);
       } catch {
         if (createdTarget) await rm(target, { recursive: true, force: true });
         onProgress(`Failed to clone ${repository.path}.`);
-        failed.push(repository.path);
+        failed.push(`${repository.path} (clone)`);
+        continue;
+      }
+
+      for (const remote of repository.remotes.filter((remote) => remote.name !== repository.cloneRemote)) {
+        try {
+          await execa("git", ["-C", target, "remote", "add", remote.name, remote.url]);
+        } catch {
+          onProgress(`Failed to configure remote ${remote.name} for ${repository.path}.`);
+          failed.push(`${repository.path} (remote ${remote.name})`);
+          break;
+        }
       }
     }
   }));
