@@ -29,6 +29,8 @@ Recipes also record package-manager lockfile hints, Node-version hints, and stan
 
 `context init` creates an `AGENTS.md` entry point and a `.ai/` Markdown context structure for the current workspace. Markdown context is authoritative: `AGENTS.md` routes work to the applicable workspace and project guidance, while `.ai/` contains workspace conventions, policies, and project context. Existing `AGENTS.md`, `.ai/`, and project-local context paths are never overwritten.
 
+Run `toolkit context init` without arguments for prompts. Supply the destination and all context flags with `--non-interactive` for scripts.
+
 `context validate` checks that the Markdown context entry point and referenced structure are present without changing files. `context agents` creates the four personal OpenCode agent files in either the workspace or global OpenCode agents directory, also without overwriting existing files.
 
 The generated structure includes shared workspace guidance under `.ai/`, project guidance under `.ai/projects/`, and project-local indexes under each non-root project's `.ai/`. Project routes are intentionally added and maintained manually; Toolkit does not infer or rewrite them after initialization.

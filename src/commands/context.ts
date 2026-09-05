@@ -1,4 +1,5 @@
 import os from "node:os";
+import { statSync } from "node:fs";
 import * as path from "pathe";
 import { defineCommand } from "citty";
 import * as prompts from "@clack/prompts";
@@ -13,7 +14,7 @@ export const contextCommand = defineCommand({
     init: defineCommand({
       meta: { name: "init", description: "Create AI context" },
       args: {
-        destination: { type: "positional", description: "Destination directory" },
+        destination: { type: "positional", description: "Destination directory", required: false },
         name: { type: "string", description: "Workspace name" },
         purpose: { type: "string", description: "Workspace purpose" },
         "context-path": { type: "string", description: "Shared context directory" },
@@ -25,11 +26,17 @@ export const contextCommand = defineCommand({
         const defaults = defaultAiContextOptions(destination);
         if (!args["non-interactive"]) prompts.intro("Set up AI context");
         const values = await resolveContextInitValues(args as Parameters<typeof resolveContextInitValues>[0], {
-          destination: async () => process.cwd(),
-          name: async () => askText("What is this workspace called?", defaults.workspaceName),
+          destination: async () => askText("Where should Toolkit create the context?", process.cwd(), (value) => {
+            try {
+              return statSync(path.resolve(value ?? "")).isDirectory() ? undefined : "Enter an existing directory.";
+            } catch {
+              return "That directory does not exist.";
+            }
+          }),
+          name: async (selectedDestination) => askText("What is this workspace called?", defaultAiContextOptions(selectedDestination).workspaceName),
           purpose: async () => askText("What is this workspace for?", defaults.workspacePurpose),
-          contextPath: async () => defaults.contextPath!,
-          project: async () => `${defaults.projectId}:.`,
+          contextPath: async () => askText("Where should shared context live?", defaults.contextPath!),
+          project: async () => askText("What is the primary project? Use id:path.", `${defaults.projectId}:.`),
         });
         if (!args["non-interactive"] && !await confirm(`Create AGENTS.md and context files in ${path.resolve(values.destination)}?`)) cancelled();
         const files = await setupAiContext(values.destination, {
@@ -74,8 +81,12 @@ export const contextCommand = defineCommand({
   },
 });
 
-async function askText(message: string, initialValue: string): Promise<string> {
-  const value = await prompts.text({ message, initialValue, validate: (answer) => answer?.trim() ? undefined : "A value is required." });
+async function askText(message: string, initialValue: string, validate?: (value: string | undefined) => string | undefined): Promise<string> {
+  const value = await prompts.text({
+    message,
+    initialValue,
+    validate: (answer) => answer?.trim() ? validate?.(answer) : "A value is required.",
+  });
   if (prompts.isCancel(value)) cancelled();
   return value.trim();
 }
