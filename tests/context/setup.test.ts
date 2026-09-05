@@ -1,4 +1,4 @@
-import { access, mkdtemp, rm, writeFile, readFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, rm, symlink, writeFile, readFile, readdir } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
@@ -17,25 +17,18 @@ describe("setupAiContext", () => {
     const options = {
       workspaceName: "Workspace",
       workspacePurpose: "Build useful tools.",
-      projectId: "toolkit",
-      projectScope: "The command-line application.",
+      contextPath: ".ai",
+      projects: [{ id: "toolkit", path: ".", scope: "The command-line application." }],
     };
 
-    await expect(setupAiContext(directory, options)).resolves.toHaveLength(10);
+    await expect(setupAiContext(directory, options)).resolves.toHaveLength(7);
     await expect(access(path.join(directory, "AGENTS.md"))).resolves.toBeUndefined();
-    await expect(access(path.join(directory, ".ai", "domains"))).resolves.toBeUndefined();
-    const context = JSON.parse(await readFile(path.join(directory, ".ai", "context.json"), "utf8"));
-
-    expect(context.workspace).toBe("Workspace");
-    expect(context.projects[0]).toMatchObject({ id: "toolkit", match: ["."], read: [".ai/projects/toolkit.md"] });
-    expect(JSON.stringify(context)).not.toContain("{{");
+    await expect(access(path.join(directory, ".ai", "context.json"))).rejects.toThrow();
     await expect(access(path.join(directory, ".ai", "projects", "toolkit.md"))).resolves.toBeUndefined();
     await expect(access(path.join(directory, ".ai", "policies", "delegation.md"))).resolves.toBeUndefined();
-    await expect(readFile(path.join(directory, ".ai", "ongoing", "current.md"), "utf8")).resolves.toBe("# Current task\n\nNo ongoing task.\n");
-    await expect(readFile(path.join(directory, ".ai", "ongoing", "TASK_TEMPLATE.md"), "utf8")).resolves.toContain("## Goal and acceptance criteria");
-    await expect(readFile(path.join(directory, ".ai", "ongoing", "README.md"), "utf8")).resolves.toContain("Copy `TASK_TEMPLATE.md`");
-    await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toContain(".ai/ongoing/current.md");
-    await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toContain("when the user explicitly asks");
+    await expect(readdir(path.join(directory, ".ai"))).resolves.not.toContain("ongoing");
+    await expect(readdir(path.join(directory, ".ai"))).resolves.not.toContain("history");
+    await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toContain("Markdown context is authoritative");
   });
 
   it("does not overwrite an existing AI context entry point", async () => {
@@ -65,10 +58,64 @@ describe("setupAiContext", () => {
   it("normalizes a project ID before using it as a context file path", async () => {
     const directory = await makeTemporaryDirectory();
 
-    await setupAiContext(directory, { ...defaultAiContextOptions(directory), projectId: "../Outside Project" });
+    await setupAiContext(directory, { ...defaultAiContextOptions(directory), projects: [{ id: "../Outside Project", path: ".", scope: "Scope" }] });
 
     await expect(access(path.join(directory, ".ai", "projects", "outside-project.md"))).resolves.toBeUndefined();
     await expect(access(path.join(directory, "Outside Project.md"))).rejects.toThrow();
+  });
+
+  it("creates shared and project-local context for multiple projects", async () => {
+    const directory = await makeTemporaryDirectory();
+    const options = {
+      workspaceName: "Workspace",
+      workspacePurpose: "Build useful tools.",
+      contextPath: "shared/.ai",
+      projects: [
+        { id: "one", path: "projects/one", scope: "One" },
+        { id: "two", path: "projects/two", scope: "Two" },
+      ],
+    };
+
+    await expect(setupAiContext(directory, options)).resolves.toEqual([
+      "AGENTS.md",
+      "shared/.ai/README.md",
+      "shared/.ai/workspace.md",
+      "shared/.ai/engineering-conventions.md",
+      "shared/.ai/policies/delegation.md",
+      "shared/.ai/policies/context-maintenance.md",
+      "shared/.ai/projects/one.md",
+      "projects/one/.ai/README.md",
+      "shared/.ai/projects/two.md",
+      "projects/two/.ai/README.md",
+    ]);
+  });
+
+  it("preflights project-local conflicts without partial writes", async () => {
+    const directory = await makeTemporaryDirectory();
+    await mkdir(path.join(directory, "projects", "one", ".ai"), { recursive: true });
+    await writeFile(path.join(directory, "projects", "one", ".ai", "README.md"), "keep me");
+
+    await expect(setupAiContext(directory, {
+      ...defaultAiContextOptions(directory),
+      projects: [{ id: "one", path: "projects/one", scope: "One" }],
+    })).rejects.toThrow("projects/one/.ai/README.md already exists");
+    await expect(access(path.join(directory, "AGENTS.md"))).rejects.toThrow();
+    await expect(access(path.join(directory, ".ai"))).rejects.toThrow();
+    await expect(readFile(path.join(directory, "projects", "one", ".ai", "README.md"), "utf8")).resolves.toBe("keep me");
+  });
+
+  it("rejects a project path whose parent is a symlink outside the destination", async () => {
+    const directory = await makeTemporaryDirectory();
+    const outside = await makeTemporaryDirectory("toolkit-outside-");
+    await mkdir(path.join(directory, "projects"), { recursive: true });
+    await symlink(outside, path.join(directory, "projects", "one"), "dir");
+
+    await expect(setupAiContext(directory, {
+      ...defaultAiContextOptions(directory),
+      projects: [{ id: "one", path: "projects/one", scope: "One" }],
+    })).rejects.toBeInstanceOf(AiContextSetupError);
+    await expect(access(path.join(directory, "AGENTS.md"))).rejects.toThrow();
+    await expect(readdir(outside)).resolves.toEqual([]);
   });
 });
 
@@ -83,9 +130,14 @@ describe("setupOpenCodeAgents", () => {
       "coder.md",
     ]);
     await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("mode: primary");
+    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
+    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.not.toContain("Trigate");
     await expect(readFile(path.join(directory, "researcher.md"), "utf8")).resolves.toContain("read-only code researcher");
+    await expect(readFile(path.join(directory, "researcher.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
     await expect(readFile(path.join(directory, "external-researcher.md"), "utf8")).resolves.toContain("webfetch: allow");
+    await expect(readFile(path.join(directory, "external-researcher.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
     await expect(readFile(path.join(directory, "coder.md"), "utf8")).resolves.toContain("edit: allow");
+    await expect(readFile(path.join(directory, "coder.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
   });
 
   it("does not overwrite any existing personal agent", async () => {
