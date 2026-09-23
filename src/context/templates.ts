@@ -81,7 +81,25 @@ ${rootProject.scope}
 
 This is this project's task router. When the workspace router selected this project, choose the narrowest route below and read it in its listed order. When no route applies, inspect the requested source file directly.
 
-Add task routes here when a real project boundary appears. When working directly in this project, start here immediately, then fall back directly to the named source when no narrower route applies. In a deferred workspace session, this README is the selected local index after the root router matches this project. Do not browse every file in \`.ai\` or read held-project context.` : ""}
+When working directly in this project, start here immediately. In a deferred workspace session, this README is the selected local index after the root router matches this project. Do not browse every file in \`.ai\` or read held-project context.
+
+## Files
+
+| File | Read when you're... |
+| --- | --- |
+| <!-- example.md --> | <!-- working on a focused project concern --> |
+
+## Rules
+
+- This file is the local source of truth for project-specific task routing.
+- Keep file descriptions and task routes updated when project-specific decisions or boundaries change.
+- Read only the files selected by the applicable task route or an exact user-named file.
+
+## Task routes
+
+- Add focused task routes here when a real project boundary appears.
+- Route format: \`local-context.md\` → optional shared/domain context → source.
+- When no route applies, inspect the requested source file directly.` : ""}
 `;
 }
 
@@ -140,7 +158,25 @@ ${project.scope}
 
 This is this project's task router. When the workspace router selected this project, choose the narrowest route below and read it in its listed order. When no route applies, inspect the requested source file directly.
 
-Add task routes here when a real project boundary appears. When working directly in this project, start here immediately, then fall back directly to the named source when no narrower route applies. In a deferred workspace session, read this file only after the root router selects this project. Do not browse every file in \`.ai\`.
+When working directly in this project, start here immediately. In a deferred workspace session, read this file only after the root router selects this project. Do not browse every file in \`.ai\`.
+
+## Files
+
+| File | Read when you're... |
+| --- | --- |
+| <!-- example.md --> | <!-- working on a focused project concern --> |
+
+## Rules
+
+- This file is the local source of truth for project-specific task routing.
+- Keep file descriptions and task routes updated when project-specific decisions or boundaries change.
+- Read only the files selected by the applicable task route or an exact user-named file.
+
+## Task routes
+
+- Add focused task routes here when a real project boundary appears.
+- Route format: \`local-context.md\` → optional shared/domain context → source.
+- When no route applies, inspect the requested source file directly.
 
 ## Verification
 
