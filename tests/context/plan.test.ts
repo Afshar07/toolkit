@@ -56,11 +56,31 @@ describe("createAiContextPlan", () => {
     const paths = files.map((file) => file.relativePath);
     expect(paths.filter((value) => value === ".ai/README.md")).toHaveLength(1);
     const readme = files.find((file) => file.relativePath === ".ai/README.md")?.content ?? "";
-    expect(readme).toContain("Add task routes here");
     expect(readme).toContain("working directly in this project");
     expect(readme).toContain("deferred workspace session");
-    expect(readme).toContain("fall back directly to the named source");
     expect(readme).toContain("## First time in this project");
+    expect(readme).toContain("## Files");
+    expect(readme).toContain("| File | Read when you're... |");
+    expect(readme).toContain("## Rules");
+    expect(readme).toContain("## Task routes");
+    expect(readme).toContain("Route format:");
+    expect(readme).toContain("When no route applies, inspect the requested source file directly.");
+  });
+
+  it("scaffolds explicit task-routing sections in non-root project indexes", () => {
+    const files = createAiContextPlan({
+      workspaceName: "Workspace",
+      workspacePurpose: "Purpose",
+      projects: [{ id: "web", path: "apps/web", scope: "Web application" }],
+    });
+    const readme = files.find((file) => file.relativePath === "apps/web/.ai/README.md")?.content ?? "";
+    expect(readme).toContain("## Files");
+    expect(readme).toContain("| File | Read when you're... |");
+    expect(readme).toContain("## Rules");
+    expect(readme).toContain("## Task routes");
+    expect(readme).toContain("Route format:");
+    expect(readme).toContain("When no route applies, inspect the requested source file directly.");
+    expect(readme).toContain("## Verification");
   });
 
 });
