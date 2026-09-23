@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createAiContextPlan } from "../../src/context/plan.js";
 
 describe("createAiContextPlan", () => {
-  it("renders active routing and held-project boundaries without generated state folders", () => {
+  it("renders active routing, held-project boundaries, and indexed ongoing state", () => {
     const files = createAiContextPlan({
       workspaceName: "Workspace",
       workspacePurpose: "Purpose",
@@ -12,12 +12,14 @@ describe("createAiContextPlan", () => {
       ],
     });
     const paths = files.map((file) => file.relativePath);
-    expect(paths).not.toContain(".ai/context.json");
-    expect(paths.some((value) => value.includes("ongoing") || value.includes("history"))).toBe(false);
+    expect(paths.every((value) => !value.endsWith(".json"))).toBe(true);
+    expect(paths).toContain("apps/web/.ai/ongoing/README.md");
+    expect(paths.some((value) => value.includes("history"))).toBe(false);
     expect(files.find((file) => file.relativePath === ".ai/README.md")?.content).toContain("| web |");
     expect(files.find((file) => file.relativePath === ".ai/README.md")?.content).toContain("legacy");
     expect(paths).toContain("apps/web/.ai/README.md");
     expect(paths).not.toContain("apps/legacy/.ai/README.md");
+    expect(paths).not.toContain("apps/legacy/.ai/ongoing/README.md");
 
     const agents = files.find((file) => file.relativePath === "AGENTS.md")?.content ?? "";
     expect(agents).toContain("| web | `apps/web` | `apps/web/.ai/README.md` | `.ai/projects/web.md` |");
@@ -55,14 +57,15 @@ describe("createAiContextPlan", () => {
     });
     const paths = files.map((file) => file.relativePath);
     expect(paths.filter((value) => value === ".ai/README.md")).toHaveLength(1);
+    expect(paths).toContain(".ai/ongoing/README.md");
     const readme = files.find((file) => file.relativePath === ".ai/README.md")?.content ?? "";
-    expect(readme).toContain("working directly in this project");
-    expect(readme).toContain("deferred workspace session");
-    expect(readme).toContain("## First time in this project");
+    expect(readme).toContain("# .ai/ - Project Context for AI Agents");
+    expect(readme).toContain("At workspace-router step 3");
     expect(readme).toContain("## Files");
     expect(readme).toContain("| File | Read when you're... |");
     expect(readme).toContain("## Rules");
     expect(readme).toContain("## Task routes");
+    expect(readme).toContain("`ongoing/README.md`");
     expect(readme).toContain("Route format:");
     expect(readme).toContain("When no route applies, inspect the requested source file directly.");
   });
@@ -78,9 +81,25 @@ describe("createAiContextPlan", () => {
     expect(readme).toContain("| File | Read when you're... |");
     expect(readme).toContain("## Rules");
     expect(readme).toContain("## Task routes");
+    expect(readme).toContain("`ongoing/README.md`");
     expect(readme).toContain("Route format:");
     expect(readme).toContain("When no route applies, inspect the requested source file directly.");
     expect(readme).toContain("## Verification");
+    expect(files.find((file) => file.relativePath === "apps/web/.ai/ongoing/README.md")?.content).toContain("Read only the task document relevant");
+  });
+
+  it("uses a custom shared context path consistently for a root project", () => {
+    const files = createAiContextPlan({
+      workspaceName: "Workspace",
+      workspacePurpose: "Purpose",
+      contextPath: "shared/context",
+      projects: [{ id: "root", path: ".", scope: "Root project" }],
+    });
+    const agents = files.find((file) => file.relativePath === "AGENTS.md")?.content ?? "";
+
+    expect(agents).toContain("| root | `.` | `shared/context/README.md` | `shared/context/projects/root.md` |");
+    expect(files.map((file) => file.relativePath)).toContain("shared/context/ongoing/README.md");
+    expect(files.find((file) => file.relativePath === "shared/context/README.md")?.content).not.toContain("Each project's `.ai/README.md`");
   });
 
 });

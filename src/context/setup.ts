@@ -4,6 +4,7 @@ import { createAiContextPlan } from "./plan.js";
 import { AiContextSetupError, normalizeAiContextOptions } from "./model.js";
 import type { AiContextOptions } from "./model.js";
 import { writeContextFiles } from "./write.js";
+import { addToolkitMarker } from "./reconcile.js";
 
 export { AiContextSetupError } from "./model.js";
 export type { AiContextOptions, AiContextProject } from "./model.js";
@@ -14,7 +15,7 @@ export async function setupAiContext(destination: string, options: AiContextOpti
   await requireDirectory(root);
   const normalized = normalizeAiContextOptions(options);
   const files = createAiContextPlan(normalized);
-  await writeContextFiles(root, files);
+  await writeContextFiles(root, files.map((file) => ({ ...file, content: addToolkitMarker(file.content) })));
   return files.map(({ relativePath }) => relativePath);
 }
 

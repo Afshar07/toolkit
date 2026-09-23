@@ -1,15 +1,17 @@
 import type { AiContextOptions, AiContextProject } from "./model.js";
+import { projectLocalIndexPath } from "./path.js";
 
 export function rootAgentsMarkdown(name: string, options: AiContextOptions): string {
   const active = options.projects.filter((project) => project.status !== "held");
-  const rows = active.map((project) => `| ${project.id} | \`${project.path}\` | \`${project.path === "." ? `${options.contextPath}/README.md` : `${project.path}/.ai/README.md`}\` | \`${options.contextPath}/projects/${project.id}.md\` |`).join("\n") || "| None | — | — | — |";
+  const contextPath = options.contextPath ?? ".ai";
+  const rows = active.map((project) => `| ${project.id} | \`${project.path}\` | \`${projectLocalIndexPath(project, contextPath)}\` | \`${contextPath}/projects/${project.id}.md\` |`).join("\n") || "| None | — | — | — |";
   return `# ${name} Agent Router
 
 This file is the stable entry point for AI-assisted work in this workspace. Markdown context is authoritative.
 
 ## First time in this workspace
 
-This workspace uses routed Markdown context. Do not read every \`.ai/\` file.
+This workspace uses routed Markdown context. Do not read every context file.
 
 1. Start with this file and follow the ordered protocol below.
 2. Read only the project index, shared guidance, policies, and focused route selected for the task.
@@ -49,6 +51,31 @@ export function readmeMarkdown(options: AiContextOptions): string {
   const active = options.projects.filter((project) => project.status !== "held");
   const held = options.projects.filter((project) => project.status === "held");
   const rootProject = active.find((project) => project.path === ".");
+  if (rootProject) return `# .ai/ - Project Context for AI Agents
+
+At workspace-router step 3, select one route below; defer its documents until
+step 7, then follow the route exactly in order.
+
+## Files
+
+| File | Read when you're... |
+| --- | --- |
+| \`ongoing/README.md\` | continuing an in-progress task; read only the matching task document |
+| <!-- example.md --> | <!-- working on a focused project concern --> |
+
+## Rules
+
+- This folder is the local source of truth for AI task context in \`${rootProject.id}\`.
+- Keep file descriptions and task routes updated when project-specific decisions or boundaries change.
+- Read only the files selected by the applicable task route or an exact user-named file.
+
+## Task routes
+
+- Continuing in-progress work: \`ongoing/README.md\` → only the matching task document → source.
+- Add focused task routes here when a real project boundary appears.
+- Route format: \`local-context.md\` → optional shared/domain context → source.
+- When no route applies, inspect the requested source file directly.
+`;
   return `# Context routing
 
 Markdown files in this directory are authoritative. Read \`workspace.md\` before routing. Read engineering conventions only when the task makes them applicable.
@@ -59,7 +86,7 @@ Markdown files in this directory are authoritative. Read \`workspace.md\` before
 - \`projects/\` defines shared ownership for each project.
 - \`policies/\` defines reusable conditional rules.
 - \`domains/\`, when present, defines cross-project contracts.
-- Each project's \`.ai/README.md\` selects focused task guidance.
+- Each active project's local index selects focused task guidance.
 
 Do not load every document. Follow \`AGENTS.md\`.
 
@@ -72,34 +99,6 @@ ${active.map((project) => `| ${project.id} | \`${project.path}\` | \`${options.c
 ## Held projects
 
 ${held.map((project) => `- **${project.id}** (\`${project.path}\`): ${project.scope}`).join("\n") || "- None."}
-${rootProject ? `
-## ${rootProject.id} local context
-
-${rootProject.scope}
-
-## First time in this project
-
-This is this project's task router. When the workspace router selected this project, choose the narrowest route below and read it in its listed order. When no route applies, inspect the requested source file directly.
-
-When working directly in this project, start here immediately. In a deferred workspace session, this README is the selected local index after the root router matches this project. Do not browse every file in \`.ai\` or read held-project context.
-
-## Files
-
-| File | Read when you're... |
-| --- | --- |
-| <!-- example.md --> | <!-- working on a focused project concern --> |
-
-## Rules
-
-- This file is the local source of truth for project-specific task routing.
-- Keep file descriptions and task routes updated when project-specific decisions or boundaries change.
-- Read only the files selected by the applicable task route or an exact user-named file.
-
-## Task routes
-
-- Add focused task routes here when a real project boundary appears.
-- Route format: \`local-context.md\` → optional shared/domain context → source.
-- When no route applies, inspect the requested source file directly.` : ""}
 `;
 }
 
@@ -132,7 +131,24 @@ export function contextMaintenanceMarkdown(): string { return `# Context mainten
 
 - Keep Markdown context discoverable and authoritative.
 - Update routing when project ownership, paths, or workflow boundaries change.
-- Do not introduce generated JSON, ongoing-task, or history directories into this scaffold.
+- Keep cross-session task state in the selected project's \`ongoing/\` directory and list each active task in its \`README.md\`.
+- Read only the ongoing task matching the current work; do not use a global current-task pointer.
+- Move durable decisions into focused guidance when a task finishes, then remove its ongoing entry and task document.
+- Do not introduce generated routing JSON or history directories into this scaffold.
+`; }
+
+export function ongoingReadmeMarkdown(): string { return `# Ongoing Tasks
+
+Read only the task document relevant to the work being continued. Task documents
+record in-progress decisions, current stages, unresolved questions, and resume
+instructions.
+
+| Task | Read when you're... |
+| --- | --- |
+| None | — |
+
+Move durable conventions into the appropriate focused context document when a
+task finishes, then remove its ongoing-task entry and task document.
 `; }
 
 export function projectGuidanceMarkdown(project: AiContextProject): string { return `# ${project.id}
@@ -148,32 +164,27 @@ ${project.scope}
 `;
 }
 
-export function localProjectReadmeMarkdown(project: AiContextProject): string { return `# ${project.id} local context
+export function localProjectReadmeMarkdown(project: AiContextProject): string { return `# .ai/ - Project Context for AI Agents
 
-## Scope
-
-${project.scope}
-
-## First time in this project
-
-This is this project's task router. When the workspace router selected this project, choose the narrowest route below and read it in its listed order. When no route applies, inspect the requested source file directly.
-
-When working directly in this project, start here immediately. In a deferred workspace session, read this file only after the root router selects this project. Do not browse every file in \`.ai\`.
+At workspace-router step 3, select one route below; defer its documents until
+step 7, then follow the route exactly in order.
 
 ## Files
 
 | File | Read when you're... |
 | --- | --- |
+| \`ongoing/README.md\` | continuing an in-progress task; read only the matching task document |
 | <!-- example.md --> | <!-- working on a focused project concern --> |
 
 ## Rules
 
-- This file is the local source of truth for project-specific task routing.
+- This folder is the local source of truth for AI task context in \`${project.id}\`.
 - Keep file descriptions and task routes updated when project-specific decisions or boundaries change.
 - Read only the files selected by the applicable task route or an exact user-named file.
 
 ## Task routes
 
+- Continuing in-progress work: \`ongoing/README.md\` → only the matching task document → source.
 - Add focused task routes here when a real project boundary appears.
 - Route format: \`local-context.md\` → optional shared/domain context → source.
 - When no route applies, inspect the requested source file directly.

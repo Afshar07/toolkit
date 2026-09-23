@@ -1,13 +1,12 @@
-# Ongoing tasks
+# Ongoing Tasks
 
-Use this directory for work that spans more than one session.
+Read only the task document relevant to the work being continued. Task documents
+record in-progress decisions, current stages, unresolved questions, and resume
+instructions.
 
-## Starting a long-running task
+| Task | Read when you're... |
+| --- | --- |
+| None | — |
 
-1. Copy `TASK_TEMPLATE.md` to a descriptive task file name, such as `workspace-audit.md`.
-2. Update `current.md` to link to that note before ending the session.
-3. Fill in the task's goal, acceptance criteria, current status, decisions, files under investigation, and completed and remaining verification.
-
-## Resuming work
-
-Read `current.md` first. If it links to a task note, read that note before making changes. Update the note and `current.md` when the active task changes or completes.
+Move durable conventions into the appropriate focused context document when a
+task finishes, then remove its ongoing-task entry and task document.

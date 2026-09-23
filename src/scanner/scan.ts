@@ -5,7 +5,7 @@ import type { GitRemote, PackageManager, Repository, RootRepository, WorkspaceMa
 import { toManifestPath } from "../workspace/path.js";
 export type { GitRemote } from "../workspace/manifest.js";
 
-const ignoredDirectoryNames = new Set([".git", "node_modules", ".nuxt", "dist", ".idea", ".vscode", ".cache"]);
+const ignoredDirectoryNames = new Set([".git", ".toolkit-backups", "node_modules", ".nuxt", "dist", ".idea", ".vscode", ".cache"]);
 const lockfiles: ReadonlyArray<readonly [string, PackageManager]> = [
   ["bun.lock", "bun"],
   ["bun.lockb", "bun"],

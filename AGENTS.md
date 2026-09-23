@@ -1,33 +1,51 @@
 # toolkit Agent Router
 
-This file is the stable entry point for AI-assisted work in this workspace. Detailed routes live in `.ai/context.json`.
+This file is the stable entry point for AI-assisted work in this workspace.
+Markdown context is authoritative.
 
-## Before working
+## First time in this workspace
 
-1. Read `.ai/context.json`.
-2. Read every file in `alwaysRead`, in listed order.
-3. Identify the active project from the working directory, user-requested paths, and each project's `match` hints. Read only the matching project's index.
-4. Evaluate `routes` against the task. Read only routes whose `readWhen` conditions apply, then follow narrower routes in those documents. Skip an `archived` route unless the task explicitly requires historical recovery or investigation.
-5. Inspect an exact user-named file before broad discovery.
-6. Read `.ai/ongoing/current.md`. When it names an ongoing task, read that task's note before continuing its work.
+This workspace uses routed Markdown context. Do not read every context file.
 
-Only create or add tasks in `.ai/ongoing/` when the user explicitly asks, or when the work is large enough that it cannot reasonably be completed in one session. Otherwise, do not use ongoing-task notes.
+1. Start with this file and follow the ordered protocol below.
+2. Read only the project index, shared guidance, policies, and focused route
+   selected for the task.
+3. Treat routed Markdown as authoritative. Ask when no project matches or when
+   several matches would change the work.
+4. Inspect a user-named source file before broad discovery.
 
-If no project matches, continue only when the task is clearly workspace-level. If several projects match and the choice changes the work, ask which project is in scope.
+## Project routing table
 
-## Delegation
+| Project | Workspace-relative path | Local index | Shared guidance |
+| --- | --- | --- | --- |
+| toolkit | `.` | `.ai/README.md` | `.ai/projects/toolkit.md` |
 
-- The lead owns requirements, engineering decisions, context selection, and the final result.
-- Use `agentRoutes` to choose a worker role. Delegation is optional, not mandatory.
-- Give a worker selected context, paths, constraints, acceptance criteria, and verification requirements. Do not tell it to rediscover the entire `.ai/` tree.
-- Review all worker changes and verification results before reporting completion.
+Held projects are intentionally absent from this active routing table; their
+scope and boundaries remain in shared guidance.
 
-## Context boundaries
+## Ordered protocol
 
-- `authoritative` guidance defines a shared contract.
-- `local-delta` guidance may add project-specific rules but may not silently override an authoritative contract.
-- `reference` guidance is supporting information, not a contract.
-- `historical` guidance is read only for continuation, recovery, or an explicit historical investigation.
-- Do not load every `.ai/` document by default.
-- Resolve paths relative to the active workspace. Do not assume machine-specific absolute paths.
-- Preserve unrelated changes and do not run Git commands unless explicitly requested.
+1. Read `.ai/workspace.md`.
+2. Match the requested path in the project routing table above. For a direct
+   session, use the project containing the working directory.
+3. Read **only** the selected project's local index. Choose a task route there
+   and defer its focused documents until that route applies.
+4. Read the selected project's shared guidance at the path shown above.
+5. For coding, testing, configuration, documentation, or verification tasks,
+   read `.ai/engineering-conventions.md`.
+6. Read only task-applicable policies.
+7. Execute the selected route in its exact order, including any named domain
+   contract.
+8. Inspect an exact user-named source file before broad discovery.
+
+If no project matches, continue only for workspace-level work; do not guess a
+project. If multiple projects match and the choice changes the work, ask for
+clarification. Do not browse all of `.ai` or all local indexes.
+
+## Boundaries
+
+- Shared guidance defines cross-project contracts; local indexes define
+  project-specific routes.
+- Held projects are not active routes and must not be selected for ordinary work.
+- Preserve unrelated changes and keep work within the selected project and
+  requested paths.

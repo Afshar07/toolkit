@@ -41,6 +41,7 @@ describe("scanWorkspace", () => {
     await mkdir(path.join(workspace, "notes"));
     await mkdir(path.join(workspace, "infrastructure", "templates"), { recursive: true });
     await mkdir(path.join(workspace, "node_modules"));
+    await mkdir(path.join(workspace, ".toolkit-backups", "run", "empty"), { recursive: true });
 
     await expect(scanWorkspace(workspace)).resolves.toEqual({
       schemaVersion: 3,

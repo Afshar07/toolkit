@@ -21,13 +21,14 @@ describe("setupAiContext", () => {
       projects: [{ id: "toolkit", path: ".", scope: "The command-line application." }],
     };
 
-    await expect(setupAiContext(directory, options)).resolves.toHaveLength(7);
+    await expect(setupAiContext(directory, options)).resolves.toHaveLength(8);
     await expect(access(path.join(directory, "AGENTS.md"))).resolves.toBeUndefined();
-    await expect(access(path.join(directory, ".ai", "context.json"))).rejects.toThrow();
     await expect(access(path.join(directory, ".ai", "projects", "toolkit.md"))).resolves.toBeUndefined();
     await expect(access(path.join(directory, ".ai", "policies", "delegation.md"))).resolves.toBeUndefined();
-    await expect(readdir(path.join(directory, ".ai"))).resolves.not.toContain("ongoing");
+    await expect(access(path.join(directory, ".ai", "ongoing", "README.md"))).resolves.toBeUndefined();
+    await expect(readdir(path.join(directory, ".ai", "ongoing"))).resolves.toEqual(["README.md"]);
     await expect(readdir(path.join(directory, ".ai"))).resolves.not.toContain("history");
+    await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toMatch(/^<!-- toolkit:sha256=[a-f0-9]{64} -->\n/);
     await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toContain("Markdown context is authoritative");
   });
 
@@ -85,8 +86,10 @@ describe("setupAiContext", () => {
       "shared/.ai/policies/context-maintenance.md",
       "shared/.ai/projects/one.md",
       "projects/one/.ai/README.md",
+      "projects/one/.ai/ongoing/README.md",
       "shared/.ai/projects/two.md",
       "projects/two/.ai/README.md",
+      "projects/two/.ai/ongoing/README.md",
     ]);
   });
 
@@ -108,7 +111,7 @@ describe("setupAiContext", () => {
     const directory = await makeTemporaryDirectory();
     const outside = await makeTemporaryDirectory("toolkit-outside-");
     await mkdir(path.join(directory, "projects"), { recursive: true });
-    await symlink(outside, path.join(directory, "projects", "one"), "dir");
+    await symlink(outside, path.join(directory, "projects", "one"), process.platform === "win32" ? "junction" : "dir");
 
     await expect(setupAiContext(directory, {
       ...defaultAiContextOptions(directory),
@@ -131,7 +134,7 @@ describe("setupOpenCodeAgents", () => {
     ]);
     await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("mode: primary");
     await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
-    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.not.toContain("Trigate");
+    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("workspace lead engineer");
     await expect(readFile(path.join(directory, "researcher.md"), "utf8")).resolves.toContain("read-only code researcher");
     await expect(readFile(path.join(directory, "researcher.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
     await expect(readFile(path.join(directory, "external-researcher.md"), "utf8")).resolves.toContain("webfetch: allow");

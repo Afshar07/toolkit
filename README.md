@@ -5,16 +5,19 @@ Toolkit creates portable **workspace recipes**: declarative manifests for recons
 ```sh
 toolkit scan
 toolkit scan .
-toolkit scan . --name trigate
-toolkit scan . --name trigate --output ./trigate.workspace.json
+toolkit scan . --name my-workspace
+toolkit scan . --name my-workspace --output ./my-workspace.workspace.json
 
 toolkit setup
-toolkit setup ./trigate.workspace.json
-toolkit setup ./trigate.workspace.json --destination ~/work
+toolkit setup ./my-workspace.workspace.json
+toolkit setup ./my-workspace.workspace.json --destination ~/work
 
-toolkit doctor --workspace ./trigate.workspace.json
+toolkit doctor --workspace ./my-workspace.workspace.json
 
 toolkit context init
+toolkit context init --dry-run
+toolkit context sync
+toolkit context diff
 toolkit context validate
 toolkit context agents
 ```
@@ -27,10 +30,12 @@ Recipes also record package-manager lockfile hints, Node-version hints, and stan
 
 `doctor` checks Git, Node, and recorded package managers. Node compatibility is checked only for exact `major.minor.patch` hints (with an optional `v`); ranges and major-only hints remain advisory.
 
-`context init` creates an `AGENTS.md` entry point and a `.ai/` Markdown context structure for the current workspace. Markdown context is authoritative: `AGENTS.md` routes work to the applicable workspace and project guidance, while `.ai/` contains workspace conventions, policies, and project context. Existing `AGENTS.md`, `.ai/`, and project-local context paths are never overwritten.
+`context init` creates an `AGENTS.md` entry point and a routed `.ai/` Markdown context structure for the current workspace. Markdown context is authoritative: `AGENTS.md` selects a project, each local `.ai/README.md` selects the narrowest task route, and `ongoing/README.md` indexes only tasks that must persist across sessions. Existing files are kept by default and are replaced only after explicit approval with backups.
 
-Run `toolkit context init` without arguments for prompts. Supply the destination and all context flags with `--non-interactive` for scripts.
+Run `toolkit context init` without arguments for a preflight plan and interactive conflict choices. Existing files can be kept while missing files are created, reviewed individually, or explicitly replaced with timestamped backups. Generated Markdown carries a small ownership hash so `context sync` can distinguish an unchanged Toolkit file from one edited by a person. Use `context sync` to update unmodified Toolkit-managed files and `context diff` or `--dry-run` to preview without writing.
+
+For new workspaces in scripts, supply the destination and all context flags with `--non-interactive`; sync and diff can infer values from an existing generated router. Conflicts abort by default. Select `--on-conflict=skip` to keep existing files or `--on-conflict=replace --backup` to replace them safely. Supported policies are `abort`, `skip`, `replace`, and `prompt`; `prompt` is interactive only.
 
 `context validate` checks that the Markdown context entry point and referenced structure are present without changing files. `context agents` creates the four personal OpenCode agent files in either the workspace or global OpenCode agents directory, also without overwriting existing files.
 
-The generated structure includes shared workspace guidance under `.ai/`, project guidance under `.ai/projects/`, and project-local indexes under each non-root project's `.ai/`. Project routes are intentionally added and maintained manually; Toolkit does not infer or rewrite them after initialization.
+The generated structure includes shared workspace guidance under `.ai/`, project guidance under `.ai/projects/`, project-local indexes, and an indexed `ongoing/` directory for each active project. Project and ongoing-task routes are intentionally maintained in Markdown; Toolkit does not infer or rewrite them after initialization.

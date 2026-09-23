@@ -1,6 +1,7 @@
 import type { AiContextOptions } from "./model.js";
 import { AiContextSetupError, normalizeAiContextOptions } from "./model.js";
-import { contextMaintenanceMarkdown, delegationMarkdown, engineeringMarkdown, localProjectReadmeMarkdown, projectGuidanceMarkdown, readmeMarkdown, rootAgentsMarkdown, workspaceMarkdown } from "./templates.js";
+import { contextMaintenanceMarkdown, delegationMarkdown, engineeringMarkdown, localProjectReadmeMarkdown, ongoingReadmeMarkdown, projectGuidanceMarkdown, readmeMarkdown, rootAgentsMarkdown, workspaceMarkdown } from "./templates.js";
+import { projectLocalIndexPath, projectOngoingIndexPath } from "./path.js";
 
 export interface ContextPlanFile { relativePath: string; content: string }
 
@@ -18,10 +19,11 @@ export function createAiContextPlan(input: AiContextOptions): ContextPlanFile[] 
   for (const project of options.projects) {
     files.push({ relativePath: `${contextPath}/projects/${project.id}.md`, content: projectGuidanceMarkdown(project) });
     if (project.status === "held") continue;
-    const local = project.path === "." ? `${contextPath}/README.md` : `${project.path}/.ai/README.md`;
+    const local = projectLocalIndexPath(project, contextPath);
     if (local !== `${contextPath}/README.md`) {
       files.push({ relativePath: local, content: localProjectReadmeMarkdown(project) });
     }
+    files.push({ relativePath: projectOngoingIndexPath(project, contextPath), content: ongoingReadmeMarkdown() });
   }
   const paths = files.map((file) => file.relativePath);
   const duplicate = paths.find((file, index) => paths.indexOf(file) !== index);

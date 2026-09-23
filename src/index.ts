@@ -3,6 +3,8 @@ export { defaultAiContextOptions, setupAiContext, AiContextSetupError } from "./
 export type { AiContextOptions, AiContextProject } from "./context/setup.js";
 export { validateAiContext } from "./context/validate.js";
 export type { ContextValidationIssue, ContextValidationResult, ContextValidationSeverity } from "./context/validate.js";
+export { addToolkitMarker, applyContextPlan, inspectContextPlan } from "./context/reconcile.js";
+export type { ApplyContextPlanOptions, ApplyContextPlanResult, ContextPlanDecision, ContextPlanState, InspectedContextPlanFile } from "./context/reconcile.js";
 export { parseContextProject, resolveContextInitValues } from "./commands/values.js";
 export type { ContextInitCliValues, ResolvedContextInitValues } from "./commands/values.js";
 export { setupOpenCodeAgents, OpenCodeAgentSetupError } from "./context/agents.js";
