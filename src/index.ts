@@ -7,10 +7,15 @@ export { addToolkitMarker, applyContextPlan, inspectContextPlan } from "./contex
 export type { ApplyContextPlanOptions, ApplyContextPlanResult, ContextPlanDecision, ContextPlanState, InspectedContextPlanFile } from "./context/reconcile.js";
 export { parseContextProject, resolveContextInitValues } from "./commands/values.js";
 export type { ContextInitCliValues, ResolvedContextInitValues } from "./commands/values.js";
-export { setupOpenCodeAgents, OpenCodeAgentSetupError } from "./context/agents.js";
+export { setupOpenCodeAgents, OpenCodeAgentSetupError } from "./agents/setup.js";
 export { scanWorkspace } from "./scanner/scan.js";
 export type { GitRemote, RepositoryCandidate, ScanOptions } from "./scanner/scan.js";
 export { setupWorkspace, setupWorkspaceAt, WorkspaceSetupError } from "./setup/setup.js";
 export { assertWorkspaceManifest, findWorkspaceManifests, readManifest, writeManifest } from "./workspace/manifest.js";
 export { assertManifestPath, resolveManifestPath } from "./workspace/path.js";
 export type { PackageManager, Repository, WorkspaceManifest } from "./workspace/manifest.js";
+export { canonicalAgents, canonicalAgentVersion } from "./agents/registry.js";
+export { hashAgentContent, inspectAgents, manageAgent, overrideAgent, updateAgents } from "./agents/sync.js";
+export type { AgentStatus, ManagedAgentState, ManagedAgentStatus, UpdateAgentsOptions, UpdateAgentsResult } from "./agents/sync.js";
+export { readAgentManifest, writeAgentManifest } from "./agents/manifest.js";
+export type { AgentOwnershipManifest, InstalledAgentRecord } from "./agents/manifest.js";

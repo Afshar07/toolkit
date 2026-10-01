@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import * as path from "pathe";
 import { defineCommand } from "citty";
 import * as prompts from "@clack/prompts";
-import { setupOpenCodeAgents } from "../context/agents.js";
+import { setupOpenCodeAgents } from "../agents/setup.js";
 import { applyContextPlan, inspectContextPlan } from "../context/reconcile.js";
 import type { ContextPlanDecision, InspectedContextPlanFile } from "../context/reconcile.js";
 import { createAiContextPlan } from "../context/plan.js";

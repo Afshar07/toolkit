@@ -4,6 +4,7 @@
 src/
 ├── cli.ts             # Citty command registration
 ├── commands/          # Citty + Clack interactive presentation layer
+├── agents/            # Canonical reusable agents, ownership metadata, and safe synchronization
 ├── context/           # Generates AI context and routing files; no CLI dependency
 ├── scanner/           # Inspects Git workspaces; no CLI dependency
 ├── workspace/         # Manifest schema, validation, and discovery
@@ -12,6 +13,10 @@ src/
 ```
 
 - Keep Citty and Clack in `commands/`; core modules must remain usable without a CLI.
+- Keep reusable agent behavior in the packaged root `agents/` registry, separate
+  from repository knowledge in `.ai`; `src/agents/` owns loading and safe
+  synchronization. Project installation state lives in `.toolkit/agents.json`,
+  and unowned files are never modified.
 - The `context` module creates an `AGENTS.md` entry point and `.ai/` routing
   system. Existing files are preserved unless replacement is explicitly selected;
   every replacement is backed up.

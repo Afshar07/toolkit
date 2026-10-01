@@ -3,7 +3,7 @@ import os from "node:os";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
 import { AiContextSetupError, defaultAiContextOptions, setupAiContext } from "../../src/context/setup.js";
-import { OpenCodeAgentSetupError, setupOpenCodeAgents } from "../../src/context/agents.js";
+import { OpenCodeAgentSetupError, setupOpenCodeAgents } from "../../src/agents/setup.js";
 
 const temporaryDirectories: string[] = [];
 
