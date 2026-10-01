@@ -3,6 +3,7 @@ import * as path from "pathe";
 import { defineCommand } from "citty";
 import * as prompts from "@clack/prompts";
 import type { ICanonicalAgentRegistry } from "../agents/registry.js";
+import { publishAgent, type IPublishAgentPreview } from "../agents/publish.js";
 import { inspectAgents, manageAgent, openCodeAgentDirectory, overrideAgent, updateAgents } from "../agents/sync.js";
 import { prepareAgentRegistryForUpdate, resolveOfflineAgentRegistry } from "../registry/registry.js";
 
@@ -70,6 +71,36 @@ export const agentsCommand = defineCommand({
         }
         await manageAgent(resolveDestination(args.destination), name, { replaceExisting: true }, prepared.registry);
         console.log(`${name} is now Toolkit-managed.`);
+      },
+    }),
+    publish: defineCommand({
+      meta: { name: "publish", description: "Publish one project agent to the Toolkit source repository" },
+      args: {
+        name: agentNameArg(),
+        destination: destinationOption(),
+        "dry-run": { type: "boolean", description: "Fetch and preview without committing, pushing, or changing local state" },
+        yes: { type: "boolean", description: "Publish without the final interactive confirmation" },
+        "include-override": { type: "boolean", description: "Explicitly publish an override and return it to Toolkit management" },
+        "allow-unmanaged": { type: "boolean", description: "Explicitly publish a canonical-name file without an installed baseline" },
+      },
+      async run({ args }) {
+        const interactive = process.stdin.isTTY && process.stdout.isTTY;
+        const result = await publishAgent(String(args.name), {
+          destination: resolveDestination(args.destination),
+          dryRun: args["dry-run"] === true,
+          includeOverride: args["include-override"] === true,
+          allowUnmanaged: args["allow-unmanaged"] === true,
+          onPreview: printPublishPreview,
+          confirm: args.yes === true ? async () => true : !interactive ? async () => {
+            throw new Error("Publishing requires confirmation. Re-run with --yes in a non-interactive environment.");
+          } : async () => {
+            const confirmed = await prompts.confirm({ message: "Publish this agent to the Toolkit repository?", initialValue: false });
+            return !prompts.isCancel(confirmed) && confirmed === true;
+          },
+        });
+        if (result.outcome === "unchanged") console.log("Nothing to publish; the local definition already matches upstream.");
+        else if (result.outcome === "dry-run") console.log("Dry run complete; no persistent state was changed.");
+        else console.log(`Published successfully (${result.commit?.slice(0, 8)}); the project agent is Toolkit-managed.`);
       },
     }),
   },
@@ -144,4 +175,13 @@ function printUpdateResult(result: Awaited<ReturnType<typeof updateAgents>>): vo
   for (const name of result.overrides) console.log(`• ${name} override preserved`);
   for (const name of result.conflicts) console.warn(`⚠ ${name} preserved because Toolkit cannot safely overwrite it`);
   if (!result.installed.length && !result.updated.length && !result.restored.length && !result.conflicts.length) console.log("No agent updates were needed.");
+}
+
+function printPublishPreview(preview: IPublishAgentPreview): void {
+  console.log("Agent publication preview");
+  console.log(`Project agent: ${preview.agentPath}`);
+  console.log(`Target: ${preview.repository} (${preview.branch})`);
+  console.log(`Local definition differs: ${preview.differs ? "yes" : "no"}`);
+  if (preview.proposedVersion) console.log(`Canonical version: ${preview.currentVersion} → ${preview.proposedVersion}`);
+  if (preview.diff) console.log(`\n${preview.diff.trimEnd()}\n`);
 }
