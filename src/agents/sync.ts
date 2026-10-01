@@ -42,6 +42,7 @@ export interface UpdateAgentsResult {
 
 export interface IRecordPublishedAgentOptions {
   removeOverride: boolean;
+  originalContent: string;
 }
 
 export const openCodeAgentDirectory = ".opencode/agents";
@@ -160,7 +161,7 @@ export async function manageAgent(projectRoot: string, name: string, options: IM
   await writeAgentManifest(root, manifest);
 }
 
-/** Record a published file only when the project still contains the exact bytes that were pushed. */
+/** Install published LF bytes only when the project still contains the exact bytes originally inspected. */
 export async function recordPublishedAgent(
   projectRoot: string,
   name: string,
@@ -170,11 +171,9 @@ export async function recordPublishedAgent(
 ): Promise<void> {
   const root = await requireProjectRoot(projectRoot);
   const target = path.join(root, openCodeAgentDirectory, `${name}.md`);
-  const current = await readRegularAgent(target);
-  if (current === undefined || hashAgentContent(current) !== hashAgentContent(content)) {
-    throw new Error(`Local agent changed during publication: ${target}`);
-  }
   const manifest = await readAgentManifest(root);
+  await assertRegularTargetHash(target, hashAgentContent(options.originalContent));
+  await writeFile(target, content, "utf8");
   manifest.installed[name] = installedRecord(content, version);
   if (options.removeOverride) manifest.overrides = manifest.overrides.filter((candidate) => candidate !== name);
   await writeAgentManifest(root, manifest);

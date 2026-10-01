@@ -121,6 +121,13 @@ Use `--dry-run` for the upstream diff and proposed version without persistent
 changes, or `--yes` to confirm in a non-interactive environment. `--destination`
 selects another project directory.
 
+Canonical agent definitions are LF text. Publishing converts only CRLF line
+endings to LF, preserving all other content and trailing-newline behavior; an
+agent differing from upstream only by CRLF versus LF has no shared change to
+publish. After an actual publication, Toolkit verifies that the project file did
+not change during the operation, installs the published LF bytes locally, and
+records the hash of those exact installed bytes.
+
 Then, on another computer and inside any project, run:
 
 ```sh
@@ -143,6 +150,15 @@ If the remote push succeeds but registry refresh or ownership recording fails,
 Toolkit reports “published successfully; local synchronization incomplete.” Do
 not publish again: run `toolkit agents update` to refresh distribution state,
 then use `toolkit agents manage NAME --yes` only if ownership still needs repair.
+
+New temporary authoring checkouts and machine registries explicitly disable Git
+checkout line-ending conversion. Existing clean registries created with
+`core.autocrlf=true` remain supported without a destructive rewrite: Toolkit
+interprets their validated canonical files as LF and deliberately converts
+eligible unchanged project agents through the normal synchronization flow.
+Dirty or diverged registries remain refused. If an existing registry cannot be
+safely refreshed, preserve it and resolve the reported Git state before running
+`toolkit agents update`; do not reset or edit the registry as an authoring clone.
 
 The first update installs missing canonical agents and records their content
 hashes in `.toolkit/agents.json`. Later updates replace a managed file only when

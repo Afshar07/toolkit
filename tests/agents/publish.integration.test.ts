@@ -1,12 +1,12 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
 import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import { incrementCanonicalVersion, publishAgent } from "../../src/agents/publish.js";
 import { readAgentManifest } from "../../src/agents/manifest.js";
-import { overrideAgent, updateAgents } from "../../src/agents/sync.js";
-import { initializeToolkitRegistry, prepareAgentRegistryForUpdate } from "../../src/registry/registry.js";
+import { hashAgentContent, overrideAgent, updateAgents } from "../../src/agents/sync.js";
+import { initializeToolkitRegistry, prepareAgentRegistryForUpdate, readLocalAgentRegistry } from "../../src/registry/registry.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
 import { createGitRegistryFixture, publishAgents } from "../helpers/git.js";
 
@@ -14,9 +14,15 @@ const temporaryDirectories: string[] = [];
 afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
 
 describe("agent publication", () => {
-  it("publishes only the selected agent and manifest, reconciles ownership, and can be received elsewhere", async () => {
-    const setup = await fixture();
-    await writeFile(agentPath(setup.project, "coder"), "coder improved\n");
+  it.each([
+    { inheritedAutoCrlf: true, localContent: "coder improved\n", label: "autocrlf=true with LF local content" },
+    { inheritedAutoCrlf: false, localContent: "coder improved\n", label: "autocrlf=false with LF local content" },
+    { inheritedAutoCrlf: true, localContent: "coder improved\r\nsecond line\r\n", label: "autocrlf=true with CRLF local content" },
+    { inheritedAutoCrlf: false, localContent: "coder improved\r\nsecond line\r\n", label: "autocrlf=false with CRLF local content" },
+  ])("publishes, reconciles, and can be received under $label", async ({ inheritedAutoCrlf, localContent }) => {
+    const setup = await fixture(inheritedAutoCrlf);
+    await writeFile(agentPath(setup.project, "coder"), localContent);
+    const canonicalContent = localContent.replace(/\r\n/g, "\n");
 
     const result = await publishAgent("coder", publishOptions(setup));
 
@@ -24,14 +30,57 @@ describe("agent publication", () => {
     expect(result.localSynchronizationComplete).toBe(true);
     const changed = await execa("git", ["--git-dir", setup.remote, "diff-tree", "--no-commit-id", "--name-only", "-r", "main"]);
     expect(changed.stdout.split(/\r?\n/).sort()).toEqual(["agents/coder.md", "agents/manifest.json"]);
-    expect((await readAgentManifest(setup.project)).installed.coder?.version).toBe(result.preview.proposedVersion);
+    const manifest = await readAgentManifest(setup.project);
+    expect(manifest.installed.coder?.version).toBe(result.preview.proposedVersion);
+    expect(manifest.installed.coder?.hash).toBe(hashAgentContent(canonicalContent));
+    await expect(readFile(agentPath(setup.project, "coder"), "utf8")).resolves.toBe(canonicalContent);
 
     const other = path.join(setup.root, "other");
     await mkdir(other);
-    const refreshed = await prepareAgentRegistryForUpdate(setup.paths);
+    const refreshed = await prepareAgentRegistryForUpdate(setup.paths, { gitEnvironment: setup.gitEnvironment });
     await updateAgents(other, {}, refreshed.registry);
-    await expect(readFile(agentPath(other, "coder"), "utf8")).resolves.toBe("coder improved\n");
+    await expect(readFile(agentPath(other, "coder"), "utf8")).resolves.toBe(canonicalContent);
     await expect(readdir(setup.temporaryParent)).resolves.toEqual([]);
+  });
+
+  it("treats a local CRLF-only difference as no shared-content change", async () => {
+    const setup = await fixture(true);
+    await writeFile(agentPath(setup.project, "coder"), "coder v1\r\n");
+    const before = await remoteHead(setup.remote);
+
+    const result = await publishAgent("coder", publishOptions(setup));
+
+    expect(result.outcome).toBe("unchanged");
+    expect(await remoteHead(setup.remote)).toBe(before);
+    await expect(readFile(agentPath(setup.project, "coder"), "utf8")).resolves.toBe("coder v1\r\n");
+  });
+
+  it("reads and safely refreshes an existing CRLF machine registry as canonical LF", async () => {
+    const setup = await fixture(true, true);
+    expect(await readFile(path.join(setup.paths.agents, "coder.md"), "utf8")).toBe("coder v1\r\n");
+    expect((await readLocalAgentRegistry(setup.paths)).agents["coder.md"]).toBe("coder v1\n");
+    const legacyManifest = await readAgentManifest(setup.project);
+    await writeFile(agentPath(setup.project, "coder"), "coder v1\r\n");
+    legacyManifest.installed.coder!.hash = hashAgentContent("coder v1\r\n");
+    await writeFile(path.join(setup.project, ".toolkit/agents.json"), `${JSON.stringify(legacyManifest, null, 2)}\n`);
+    await writeFile(agentPath(setup.project, "coder"), "legacy registry publication\r\n");
+
+    const result = await publishAgent("coder", publishOptions(setup));
+
+    expect(result.outcome).toBe("published");
+    await expect(readFile(agentPath(setup.project, "coder"), "utf8")).resolves.toBe("legacy registry publication\n");
+    expect((await readAgentManifest(setup.project)).installed.coder?.hash).toBe(hashAgentContent("legacy registry publication\n"));
+  });
+
+  it("keeps canonical LF behavior when Git environment overrides repository configuration", async () => {
+    const setup = await fixture(false, false, true);
+    await writeFile(agentPath(setup.project, "coder"), "forced conversion\r\n");
+
+    const result = await publishAgent("coder", publishOptions(setup));
+
+    expect(result.outcome).toBe("published");
+    expect((await readLocalAgentRegistry(setup.paths)).agents["coder.md"]).toBe("forced conversion\n");
+    await expect(readFile(agentPath(setup.project, "coder"), "utf8")).resolves.toBe("forced conversion\n");
   });
 
   it("does not commit, bump, or persist state for identical content or a dry run", async () => {
@@ -66,12 +115,12 @@ describe("agent publication", () => {
     await writeFile(agentPath(unmanaged, "coder"), "unmanaged\n");
     await expect(publishAgent("coder", { ...publishOptions(fresh), destination: unmanaged })).rejects.toThrow("--allow-unmanaged");
 
-    const unsafe = path.join(fresh.root, "unsafe");
-    await mkdir(unsafe);
-    await execa(process.platform === "win32" ? "cmd" : "ln", process.platform === "win32"
-      ? ["/c", "mklink", "/D", path.join(unsafe, ".opencode"), path.join(fresh.root, "outside")]
-      : ["-s", path.join(fresh.root, "outside"), path.join(unsafe, ".opencode")]);
+    const unsafe = path.resolve(fresh.root, "unsafe");
+    const outside = path.resolve(fresh.root, "outside");
+    await Promise.all([mkdir(unsafe), mkdir(outside, { recursive: true })]);
+    await symlink(outside, path.join(unsafe, ".opencode"), process.platform === "win32" ? "junction" : "dir");
     await expect(publishAgent("coder", { ...publishOptions(fresh), destination: unsafe })).rejects.toThrow(/regular file|unsafe/);
+    await expect(readdir(outside)).resolves.toEqual([]);
   });
 
   it("rejects a normal push when upstream advances and cleans its checkout", async () => {
@@ -112,19 +161,30 @@ interface IFixture {
   registry: Awaited<ReturnType<typeof initializeToolkitRegistry>>;
   temporaryParent: string;
   initialHead: string;
+  gitEnvironment: NodeJS.ProcessEnv;
 }
 
-async function fixture(): Promise<IFixture> {
+async function fixture(inheritedAutoCrlf = false, legacyRegistry = false, forceAutoCrlf = false): Promise<IFixture> {
   const root = await mkdtemp(path.join(os.tmpdir(), "toolkit-publish-test-"));
   temporaryDirectories.push(root);
+  const globalConfig = path.join(root, "gitconfig");
+  await writeFile(globalConfig, `[core]\n\tautocrlf = ${inheritedAutoCrlf}\n`);
+  const gitEnvironment = {
+    GIT_CONFIG_GLOBAL: globalConfig,
+    GIT_CONFIG_NOSYSTEM: "1",
+    ...(forceAutoCrlf ? { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.autocrlf", GIT_CONFIG_VALUE_0: "true" } : {}),
+  };
   const source = await createGitRegistryFixture(root, { lead: "lead v1\n", coder: "coder v1\n" });
   const paths = resolveToolkitRegistryPaths(path.join(root, "home"));
-  const registry = await initializeToolkitRegistry(paths, { remote: source.remote });
+  if (legacyRegistry) await createLegacyRegistry(paths.root, source.remote, gitEnvironment);
+  const registry = legacyRegistry
+    ? await readLocalAgentRegistry(paths)
+    : await initializeToolkitRegistry(paths, { remote: source.remote, gitEnvironment });
   const project = path.join(root, "project");
   const temporaryParent = path.join(root, "temporary");
   await Promise.all([mkdir(project), mkdir(temporaryParent)]);
   await updateAgents(project, {}, registry);
-  return { root, ...source, project, paths, registry, temporaryParent, initialHead: await remoteHead(source.remote) };
+  return { root, ...source, project, paths, registry, temporaryParent, initialHead: await remoteHead(source.remote), gitEnvironment };
 }
 
 function publishOptions(setup: IFixture) {
@@ -136,7 +196,16 @@ function publishOptions(setup: IFixture) {
     now: new Date("2026-10-01T12:00:00Z"),
     confirm: async () => true,
     gitIdentity: { name: "Toolkit Tests", email: "toolkit-tests@example.test" },
+    gitEnvironment: setup.gitEnvironment,
   };
+}
+
+async function createLegacyRegistry(root: string, remote: string, gitEnvironment: NodeJS.ProcessEnv): Promise<void> {
+  await mkdir(path.dirname(root), { recursive: true });
+  await execa("git", ["clone", "--config", "core.autocrlf=true", "--filter=blob:none", "--no-checkout", "--", remote, root], { env: gitEnvironment });
+  await execa("git", ["-C", root, "sparse-checkout", "init", "--no-cone"], { env: gitEnvironment });
+  await execa("git", ["-C", root, "sparse-checkout", "set", "/agents/"], { env: gitEnvironment });
+  await execa("git", ["-C", root, "checkout"], { env: gitEnvironment });
 }
 
 function agentPath(project: string, name: string): string { return path.join(project, ".opencode/agents", `${name}.md`); }

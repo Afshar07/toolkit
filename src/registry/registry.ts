@@ -56,9 +56,9 @@ export async function initializeToolkitRegistry(
   return { ...registry, path: paths.agents };
 }
 
-export async function updateToolkitRegistry(paths = resolveToolkitRegistryPaths()): Promise<ICanonicalAgentRegistry> {
+export async function updateToolkitRegistry(paths = resolveToolkitRegistryPaths(), options: IRegistryGitOptions = {}): Promise<ICanonicalAgentRegistry> {
   await readLocalAgentRegistry(paths);
-  await updateGitRegistry(paths.root);
+  await updateGitRegistry(paths.root, options);
   return await readLocalAgentRegistry(paths);
 }
 
@@ -83,14 +83,14 @@ export async function prepareAgentRegistryForUpdate(
     const existing = await readLocalAgentRegistry(paths);
     let before: IGitRegistryInfo;
     try {
-      before = await inspectGitRegistry(paths.root);
+      before = await inspectGitRegistry(paths.root, options);
     } catch (error) {
       return { registry: existing, action: "existing", warning: `Could not inspect or refresh Toolkit registry: ${error instanceof Error ? error.message : "Git failed"}` };
     }
     if (!before.clean) throw new ToolkitRegistryError(`Toolkit registry at ${paths.root} has local modifications; refusing to update or use it automatically.`);
     try {
-      const registry = await updateToolkitRegistry(paths);
-      const info = await inspectGitRegistry(paths.root);
+      const registry = await updateToolkitRegistry(paths, options);
+      const info = await inspectGitRegistry(paths.root, options);
       return { registry, action: "updated", commit: info.commit };
     } catch (error) {
       if (error instanceof RegistryGitError && (error.kind === "dirty" || error.kind === "diverged")) throw error;
@@ -99,7 +99,7 @@ export async function prepareAgentRegistryForUpdate(
   }
   try {
     const registry = await initializeToolkitRegistry(paths, options);
-    const info = await inspectGitRegistry(paths.root);
+    const info = await inspectGitRegistry(paths.root, options);
     return { registry, action: "initialized", commit: info.commit };
   } catch (error) {
     if (await localRegistryExists(paths)) throw error;
