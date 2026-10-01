@@ -1,0 +1,41 @@
+name: Publish
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Check out release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm install --global npm@11.5.1
+      - run: npm ci
+      - run: npm run verify
+      - name: Validate release version
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFile } from "node:fs/promises";
+
+          const { version } = JSON.parse(await readFile("package.json", "utf8"));
+          const releaseVersion = process.env.RELEASE_TAG.replace(/^v/, "");
+
+          if (releaseVersion !== version) {
+            console.error(`Release tag ${process.env.RELEASE_TAG} does not match package.json version ${version}.`);
+            process.exit(1);
+          }
+          NODE
+      - run: npm publish
