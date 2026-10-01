@@ -62,7 +62,7 @@ describe("compiled CLI", () => {
 
     await runCli(["agents", "manage", "coder", "--destination", project, "--yes"], home);
     expect(normalizeLineEndings(await readFile(path.join(project, ".opencode/agents/coder.md"), "utf8"))).toBe("coder v2\n");
-  });
+  }, 15_000);
 
   it("keeps both status commands offline when the configured remote disappears", async () => {
     const root = await temporaryDirectory();

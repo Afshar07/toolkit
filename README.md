@@ -186,3 +186,28 @@ suite and real local-Git integration tests, exercises the compiled CLI, packs th
 actual npm artifact, installs it into a temporary consumer, and verifies both the
 public API and bundled-agent fallback. Automated tests use temporary local bare
 remotes and never depend on GitHub or the user's Toolkit home.
+
+## Publishing a release
+
+1. Update the version in `package.json` (and its lockfile entry) and merge the
+   change to `main`.
+2. Create and publish a GitHub Release with a matching tag, such as `v1.1.0` for
+   package version `1.1.0`.
+3. Publishing the release triggers `.github/workflows/publish.yml`, which checks
+   out that exact tag, installs dependencies, runs `npm run verify`, confirms the
+   tag matches the package version, and runs `npm publish`.
+4. npm authenticates the publish through Trusted Publishing (OIDC); no npm
+   publishing token or automated OTP is used.
+
+Before the first release, configure the package's trusted publisher on npm with
+these GitHub Actions settings:
+
+```text
+GitHub owner: Afshar07
+Repository:   toolkit
+Workflow:     publish.yml
+```
+
+This npm-side configuration is an external setup step and cannot be established
+by committing the workflow. Keep npm account 2FA enabled and do not create an
+`NPM_TOKEN` for this workflow.
