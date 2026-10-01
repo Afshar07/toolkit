@@ -121,3 +121,8 @@ They must not contact GitHub, write the user's `~/.toolkit`, change global Git
 configuration, or depend on the developer's working tree. Configure Git identity
 locally in each fixture. Keep path handling portable, avoid shell-only Git
 assumptions, and skip only genuinely platform-specific symlink cases on Windows.
+
+`npm run verify` is the release-confidence gate: it builds TypeScript before
+running domain, real-Git, compiled-CLI, packed-artifact, and clean-consumer tests.
+CI runs this same command on Ubuntu and Windows; package tests must exercise only
+the supported public exports and assets present in the npm tarball.
