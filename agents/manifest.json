@@ -1,0 +1,9 @@
+{
+  "version": "2026.10.1",
+  "agents": [
+    "lead",
+    "researcher",
+    "external-researcher",
+    "coder"
+  ]
+}

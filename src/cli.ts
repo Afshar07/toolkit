@@ -5,6 +5,7 @@ import { contextCommand } from "./commands/context.js";
 import { doctorCommand } from "./commands/doctor.js";
 import { scanCommand } from "./commands/scan.js";
 import { setupCommand } from "./commands/setup.js";
+import { agentsCommand } from "./commands/agents.js";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -15,6 +16,7 @@ const main = defineCommand({
     description: "Create portable recipes for development workspaces",
   },
   subCommands: {
+    agents: agentsCommand,
     context: contextCommand,
     scan: scanCommand,
     setup: setupCommand,
