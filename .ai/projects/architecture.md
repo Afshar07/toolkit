@@ -26,6 +26,7 @@ src/
   is explicitly approved.
 - Manifests are declarative recipes: an optional explicit root repository or relative repository paths, named remotes with an explicit clone selection, and empty normal directories. Never copy source, generated files, credentials, or `.git` data.
 - Use `pathe` for portable path normalization. Validate manifest paths before setup so they cannot escape the workspace root.
+- Workspace names are portable single directory names, and HTTP(S) Git remotes are credential-free. Existing symlinks or junctions must not redirect recipe, agent, or context-backup writes outside their selected root; preflight all planned writes and use exclusive creation for new files.
 - Setup never overwrites an existing destination. Clone at most three repositories concurrently; continue other clones when one fails.
 - Tests mirror source concerns under `tests/` and use temporary Git repositories.
 
@@ -126,3 +127,8 @@ assumptions, and skip only genuinely platform-specific symlink cases on Windows.
 running domain, real-Git, compiled-CLI, packed-artifact, and clean-consumer tests.
 CI runs this same command on Ubuntu and Windows; package tests must exercise only
 the supported public exports and assets present in the npm tarball.
+
+Normal CI verifies pull requests and default-branch pushes, not every feature
+branch push. Release publication consumes the exact tagged commit only after its
+complete default-branch push verification succeeds, then transfers the prepared
+tarball to the separately OIDC-permitted publishing job.

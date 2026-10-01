@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
@@ -185,6 +185,39 @@ describe("setupWorkspace", () => {
     } as WorkspaceManifest;
 
     await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toThrow("parent-directory");
+    await expect(access(path.join(temporaryDirectory, "work"))).rejects.toThrow();
+  });
+
+  it("rejects an intermediate symlink before any planned workspace writes", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const outside = await makeTemporaryDirectory();
+    const workspace = path.join(temporaryDirectory, "work");
+    await mkdir(workspace);
+    await symlink(outside, path.join(workspace, "linked"), process.platform === "win32" ? "junction" : "dir");
+    const manifest: WorkspaceManifest = { schemaVersion: 3, name: "work", repositories: [], directories: ["ordinary", "linked/marker"] };
+
+    await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toThrow(/symbolic link|outside/);
+    await expect(access(path.join(outside, "marker"))).rejects.toThrow();
+    await expect(access(path.join(workspace, "ordinary"))).rejects.toThrow();
+  });
+
+  it("rejects unsafe workspace names without creating outside content", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    for (const name of ["../escaped", "a/b", "a\\b", "/absolute", "C:\\escape", ".", ".."]) {
+      const manifest = { schemaVersion: 3, name, repositories: [], directories: ["marker"] } as WorkspaceManifest;
+      await expect(setupWorkspace(manifest, temporaryDirectory, () => {})).rejects.toThrow(/name/);
+    }
+    await expect(access(path.join(path.dirname(temporaryDirectory), "escaped", "marker"))).rejects.toThrow();
+  });
+
+  it("rejects credential-bearing remotes without logging the credential", async () => {
+    const temporaryDirectory = await makeTemporaryDirectory();
+    const secret = "TEST_ONLY_FAKE_TOKEN";
+    const messages: string[] = [];
+    const manifest: WorkspaceManifest = { schemaVersion: 3, name: "work", directories: [], repositories: [{ name: "panel", path: "panel", cloneRemote: "origin", remotes: [{ name: "origin", url: `https://example-user:${secret}@example.invalid/repo.git` }] }] };
+    let message = "";
+    try { await setupWorkspace(manifest, temporaryDirectory, (value) => messages.push(value)); } catch (error) { message = (error as Error).message; }
+    expect(`${message}${messages.join("")}`).not.toContain(secret);
     await expect(access(path.join(temporaryDirectory, "work"))).rejects.toThrow();
   });
 

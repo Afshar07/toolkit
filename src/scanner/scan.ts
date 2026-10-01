@@ -1,7 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
-import type { GitRemote, PackageManager, Repository, RootRepository, WorkspaceManifest } from "../workspace/manifest.js";
+import { assertWorkspaceManifest, type GitRemote, type PackageManager, type Repository, type RootRepository, type WorkspaceManifest } from "../workspace/manifest.js";
+import { assertSafeGitRemoteUrl } from "../workspace/validation.js";
 import { toManifestPath } from "../workspace/path.js";
 export type { GitRemote } from "../workspace/manifest.js";
 
@@ -48,13 +49,15 @@ export async function scanWorkspace(target: string, options: ScanOptions = {}): 
     } else repositories.push(completeRepository);
   }
 
-  return {
+  const manifest: WorkspaceManifest = {
     schemaVersion: 3,
     name: path.basename(root),
     rootRepository,
     repositories,
     directories,
   };
+  assertWorkspaceManifest(manifest);
+  return manifest;
 }
 
 async function findRepositories(root: string, current: string, repositories: RepositoryCandidate[]): Promise<void> {
@@ -118,10 +121,12 @@ async function getGitRemotes(directory: string): Promise<GitRemote[]> {
     const { stdout } = await execa("git", ["-C", directory, "remote"]);
     const remotes = await Promise.all(stdout.split("\n").filter(Boolean).map(async (name) => {
       const { stdout: url } = await execa("git", ["-C", directory, "remote", "get-url", name]);
+      assertSafeGitRemoteUrl(url);
       return { name, url };
     }));
     return remotes.sort((a, b) => (a.name === "origin" ? -1 : b.name === "origin" ? 1 : a.name.localeCompare(b.name)));
   } catch (error) {
+    if (error instanceof Error && error.message.includes("Git remote URL")) throw error;
     throw new Error(`Unable to discover Git remotes for ${directory}`, { cause: error });
   }
 }

@@ -150,6 +150,20 @@ describe("scanWorkspace", () => {
 
     await expect(scanWorkspace(workspace)).rejects.toThrow(`Unable to discover Git remotes for ${repository}`);
   });
+
+  it("rejects credential-bearing secondary remotes without exposing the secret", async () => {
+    const workspace = await makeWorkspace();
+    const repository = path.join(workspace, "panel");
+    const secret = "TEST_ONLY_FAKE_TOKEN";
+    await mkdir(repository);
+    await execa("git", ["init"], { cwd: repository });
+    await execa("git", ["remote", "add", "origin", "https://example.test/panel.git"], { cwd: repository });
+    await execa("git", ["remote", "add", "backup", `https://user:${secret}@example.invalid/panel.git`], { cwd: repository });
+    let message = "";
+    try { await scanWorkspace(workspace); } catch (error) { message = (error as Error).message; }
+    expect(message).toContain("credential");
+    expect(message).not.toContain(secret);
+  });
 });
 
 async function makeWorkspace(): Promise<string> {
