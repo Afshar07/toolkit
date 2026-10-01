@@ -35,13 +35,25 @@ describe("context reconciliation", () => {
 
   it("backs up replaced originals under the supplied root", async () => {
     const directory = await temporaryDirectory();
-    const backup = await temporaryDirectory();
+    const backup = path.join(directory, ".toolkit-backups", "run");
     await mkdir(path.join(directory, "nested"));
     await writeFile(path.join(directory, "nested", "file.md"), "keep");
     const inspected = await inspectContextPlan(directory, [{ relativePath: "nested/file.md", content: "new" }]);
     const result = await applyContextPlan(inspected, { decisions: { "nested/file.md": "replace" }, backupRoot: backup });
     await expect(readFile(path.join(backup, "nested", "file.md"), "utf8")).resolves.toBe("keep");
     expect(result.backups).toEqual([nodePath.join(backup, "nested", "file.md")]);
+  });
+
+  it("rejects a redirected backup directory before changing originals", async () => {
+    const directory = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const original = path.join(directory, "file.md");
+    await writeFile(original, "keep");
+    await symlink(outside, path.join(directory, ".toolkit-backups"), process.platform === "win32" ? "junction" : "dir");
+    const inspected = await inspectContextPlan(directory, [{ relativePath: "file.md", content: "replacement" }]);
+    await expect(applyContextPlan(inspected, { decisions: { "file.md": "replace" }, backupRoot: path.join(directory, ".toolkit-backups", "run") })).rejects.toThrow(/symbolic link|unsafe/);
+    await expect(readFile(original, "utf8")).resolves.toBe("keep");
+    await expect(readFile(path.join(outside, "run", "file.md"), "utf8")).rejects.toThrow();
   });
 
   it("fails unresolved entries before writing anything", async () => {
@@ -69,6 +81,16 @@ describe("context reconciliation", () => {
     const outside = await temporaryDirectory();
     await symlink(outside, path.join(directory, "linked"), process.platform === "win32" ? "junction" : "dir");
     await expect(inspectContextPlan(directory, [{ relativePath: "linked/file.md", content: "new" }])).rejects.toThrow("unsafe");
+  });
+
+  it("rejects an existing target-file symlink without changing its referent", async () => {
+    const directory = await temporaryDirectory();
+    const outside = await temporaryDirectory();
+    const referent = path.join(outside, "file.md");
+    await writeFile(referent, "outside");
+    await symlink(referent, path.join(directory, "file.md"), "file");
+    await expect(inspectContextPlan(directory, [{ relativePath: "file.md", content: "new" }])).rejects.toThrow("not a regular file");
+    await expect(readFile(referent, "utf8")).resolves.toBe("outside");
   });
 });
 

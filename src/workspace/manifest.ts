@@ -1,6 +1,7 @@
 import { readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "pathe";
 import { assertManifestPath } from "./path.js";
+import { assertSafeGitRemoteUrl, assertWorkspaceName } from "./validation.js";
 
 export type PackageManager = "npm" | "pnpm" | "yarn" | "bun";
 
@@ -62,8 +63,11 @@ export async function findWorkspaceManifests(directory: string): Promise<Array<{
 
 export function assertWorkspaceManifest(value: unknown, filePath?: string): asserts value is WorkspaceManifest {
   const prefix = filePath ? `Invalid workspace manifest ${filePath}` : "Invalid workspace manifest";
-  if (!isRecord(value) || value.schemaVersion !== 3 || !isNonEmptyString(value.name)) {
-    throw new Error(`${prefix}: schemaVersion must be 3 and name must be non-empty`);
+  if (!isRecord(value) || value.schemaVersion !== 3 || typeof value.name !== "string") {
+    throw new Error(`${prefix}: schemaVersion must be 3 and name must be a string`);
+  }
+  try { assertWorkspaceName(value.name); } catch (error) {
+    throw new Error(`${prefix}: ${error instanceof Error ? error.message : "invalid name"}`);
   }
   if (value.rootRepository !== undefined && !isRootRepository(value.rootRepository)) throw new Error(`${prefix}: rootRepository must be valid when provided`);
   if (!Array.isArray(value.repositories) || !value.repositories.every(isRepository)) {
@@ -75,6 +79,9 @@ export function assertWorkspaceManifest(value: unknown, filePath?: string): asse
 
   try {
     for (const repository of value.repositories) assertManifestPath(repository.path);
+    for (const repository of [...value.repositories, ...(value.rootRepository ? [value.rootRepository] : [])]) {
+      for (const remote of repository.remotes) assertSafeGitRemoteUrl(remote.url);
+    }
     for (const directory of value.directories) assertManifestPath(directory);
   } catch (error) {
     throw new Error(`${prefix}: ${error instanceof Error ? error.message : "invalid path"}`);
@@ -118,7 +125,7 @@ function isRepositoryDetails(value: Record<string, unknown>): boolean {
 }
 
 function isGitRemote(value: unknown): value is GitRemote {
-  return isRecord(value) && isNonEmptyString(value.name) && isNonEmptyString(value.url);
+  return isRecord(value) && isNonEmptyString(value.name) && !value.name.startsWith("-") && isNonEmptyString(value.url);
 }
 
 function isNonEmptyString(value: unknown): value is string {

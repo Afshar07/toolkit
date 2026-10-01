@@ -3,6 +3,7 @@ import { lstat, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promise
 import * as nodePath from "node:path";
 import { AiContextSetupError } from "./model.js";
 import type { ContextPlanFile } from "./plan.js";
+import { assertSafeProjectPath, type IFilesystemRoot, isWithin } from "../workspace/safety.js";
 
 export type ContextPlanState = "create" | "unchanged" | "managed-update" | "conflict";
 export type ContextPlanDecision = "replace" | "skip";
@@ -75,6 +76,17 @@ export async function applyContextPlan(files: InspectedContextPlanFile[], option
   const unresolved = actions.filter(({ decision }) => decision === undefined).map(({ file }) => file.relativePath);
   if (unresolved.length) throw new AiContextSetupError(`AI context reconciliation requires a decision: ${unresolved.join(", ")}`);
 
+  const root = rootFromFiles(files);
+  if (options.backupRoot) {
+    const backupRoot = nodePath.resolve(options.backupRoot);
+    if (!root || !isWithin(root.lexical, backupRoot)) throw new AiContextSetupError("AI context backup root must be inside the destination.");
+    await assertSafeProjectPath(root, backupRoot, "AI context backup root");
+    for (const { file, decision } of actions) {
+      if (decision !== "replace" || file.state === "create") continue;
+      await assertSafeProjectPath(root, nodePath.resolve(backupRoot, file.relativePath), `AI context backup path ${file.relativePath}`);
+    }
+  }
+
   for (const { file, decision } of actions) {
     if (decision === "skip") continue;
     const expectedTarget = nodePath.resolve(file.rootPath, file.relativePath);
@@ -111,7 +123,9 @@ export async function applyContextPlan(files: InspectedContextPlanFile[], option
       if (options.backupRoot) {
         const backup = nodePath.resolve(options.backupRoot, file.relativePath);
         if (!isWithin(nodePath.resolve(options.backupRoot), backup)) throw new AiContextSetupError(`AI context backup path is unsafe: ${file.relativePath}`);
+        await assertSafeProjectPath(root!, backup, `AI context backup path ${file.relativePath}`);
         await mkdir(nodePath.dirname(backup), { recursive: true });
+        await assertSafeProjectPath(root!, backup, `AI context backup path ${file.relativePath}`);
         await writeFile(backup, original, { encoding: "utf8", flag: "wx" });
         result.backups.push(backup);
       }
@@ -120,10 +134,19 @@ export async function applyContextPlan(files: InspectedContextPlanFile[], option
       result.replaced.push(file.relativePath);
     }
   } catch (error) {
-    await rollback(created, replaced, result.backups);
+    await rollback(created, replaced, result.backups, root);
     throw error;
   }
   return result;
+}
+
+function rootFromFiles(files: InspectedContextPlanFile[]): IFilesystemRoot | undefined {
+  const first = files[0];
+  if (!first) return undefined;
+  if (files.some((file) => file.rootPath !== first.rootPath || file.rootRealPath !== first.rootRealPath)) {
+    throw new AiContextSetupError("AI context plan contains mixed destination roots.");
+  }
+  return { lexical: first.rootPath, real: first.rootRealPath };
 }
 
 function stateFor(existing: string, desired: string): ContextPlanState {
@@ -168,13 +191,15 @@ async function inspectParents(directory: string, rootReal: string, relativePath:
   }
 }
 
-async function rollback(created: string[], replaced: Array<{ path: string; content: string }>, backups: string[]): Promise<void> {
-  for (const file of created.reverse()) await rm(file, { force: true }).catch(() => undefined);
-  for (const file of replaced.reverse()) await writeFile(file.path, file.content, "utf8").catch(() => undefined);
-  for (const backup of backups.reverse()) await rm(backup, { force: true }).catch(() => undefined);
-}
-
-function isWithin(root: string, candidate: string): boolean {
-  const relative = nodePath.relative(root, candidate);
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${nodePath.sep}`) && !nodePath.isAbsolute(relative));
+async function rollback(created: string[], replaced: Array<{ path: string; content: string }>, backups: string[], root: IFilesystemRoot | undefined): Promise<void> {
+  if (!root) return;
+  for (const file of created.reverse()) {
+    await assertSafeProjectPath(root, file, "Context rollback path").then(() => rm(file, { force: true })).catch(() => undefined);
+  }
+  for (const file of replaced.reverse()) {
+    await assertSafeProjectPath(root, file.path, "Context rollback path").then(() => writeFile(file.path, file.content, "utf8")).catch(() => undefined);
+  }
+  for (const backup of backups.reverse()) {
+    await assertSafeProjectPath(root, backup, "Context rollback path").then(() => rm(backup, { force: true })).catch(() => undefined);
+  }
 }

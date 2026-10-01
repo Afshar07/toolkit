@@ -35,7 +35,11 @@ toolkit registry update
 
 Recipes also record package-manager lockfile hints, Node-version hints, and standalone structural or empty directories where applicable. Generated, sensitive, and machine-specific directories (such as `.git`, `node_modules`, `.nuxt`, `dist`, and IDE caches) are ignored.
 
+Recipe names are portable single directory names: they may contain ordinary human-readable characters and spaces, but not path separators, absolute or drive-qualified paths, or `.`/`..`. Git remote URLs must not embed HTTP(S) usernames, passwords, tokens, or credential-like query parameters. Use SSH (including normal addresses such as `git@github.com:owner/repo.git`) or a Git credential manager instead. Toolkit rejects an unsafe remote rather than stripping credentials and producing a recipe that may not authenticate.
+
 `setup` is interactive by default; a supplied manifest or destination skips the matching prompt. It recreates declared directories and clones repositories without installing dependencies. Existing destinations are validated as matching Git repositories and skipped; non-matching repositories or other existing content are reported as conflicts and never overwritten. If the selected clone remote fails, interactive setup can retry another recorded remote and updates the recipe’s selection after a successful fallback clone. If a secondary remote cannot be configured, the successful clone is kept and the setup error names the repository and remote.
+
+All planned project-relative writes are checked before content is created. Existing symbolic links or Windows junctions in a workspace path, agent destination, or context-backup path are rejected when they could redirect writes; target-file links are never overwritten. Explicit destinations remain user-selected roots, while children declared by a recipe must stay within the selected root. Toolkit rechecks paths near writes, but—as with ordinary filesystem tools—these checks do not claim complete protection against a privileged process racing filesystem changes.
 
 `doctor` checks Git, Node, and recorded package managers. Node compatibility is checked only for exact `major.minor.patch` hints (with an optional `v`); ranges and major-only hints remain advisory.
 
@@ -187,16 +191,25 @@ actual npm artifact, installs it into a temporary consumer, and verifies both th
 public API and bundled-agent fallback. Automated tests use temporary local bare
 remotes and never depend on GitHub or the user's Toolkit home.
 
+GitHub Actions runs the full Ubuntu and Windows matrix for pull requests and for pushes to `main`; feature-branch pushes do not start a duplicate push run. Superseded pull-request verification is cancelled. A release uses the successful complete `Verify` workflow for the exact tagged commit's `main` push rather than running the suite again.
+
 ## Publishing a release
 
 1. Update the version in `package.json` (and its lockfile entry) and merge the
    change to `main`.
 2. Create and publish a GitHub Release with a matching tag, such as `v1.1.0` for
    package version `1.1.0`.
-3. Publishing the release triggers `.github/workflows/publish.yml`, which checks
-   out that exact tag, installs dependencies, runs `npm run verify`, confirms the
-   tag matches the package version, and runs `npm publish`.
-4. npm authenticates the publish through Trusted Publishing (OIDC); no npm
+3. Publishing the release triggers `.github/workflows/publish.yml`. It resolves
+   annotated or lightweight tags to a commit, requires that commit in `main`'s
+   history, and waits (for a bounded period) for the latest exact-SHA `Verify`
+   push run. Missing, failed, cancelled, skipped, or timed-out verification stops
+   publication. After the qualifying verification is available, re-run the
+   failed Publish workflow from GitHub Actions rather than moving the tag.
+4. A preparation job validates the tag against `package.json`, builds, and packs
+   that exact checkout. A separate OIDC-enabled job downloads the immutable
+   workflow artifact and publishes that tarball without rebuilding it or running
+   package lifecycle scripts.
+5. npm authenticates the publish through Trusted Publishing (OIDC); no npm
    publishing token or automated OTP is used.
 
 Before the first release, configure the package's trusted publisher on npm with
@@ -211,3 +224,12 @@ Workflow:     publish.yml
 This npm-side configuration is an external setup step and cannot be established
 by committing the workflow. Keep npm account 2FA enabled and do not create an
 `NPM_TOKEN` for this workflow.
+
+The source repository is private while `@afshar7/toolkit` is public. Treat every
+file selected by `package.json#files` as public: the package contains only the
+compiled `dist/` output and bundled `agents/`, not `.ai` context, tests, Git
+metadata, workspace recipes, or local credentials. The workflow does not claim
+npm provenance from the private repository. Administrators must separately
+configure the npm trusted publisher, keep account 2FA enabled, and enforce the
+desired GitHub default-branch and tag/release protections; workflows cannot
+prove those external settings exist.
