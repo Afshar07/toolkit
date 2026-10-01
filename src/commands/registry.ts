@@ -22,7 +22,7 @@ export const registryCommand = defineCommand({
       },
     }),
     status: defineCommand({
-      meta: { name: "status", description: "Show local Toolkit registry information" },
+      meta: { name: "status", description: "Show local Toolkit registry information without refreshing" },
       async run() {
         const info = await inspectToolkitRegistry(resolveToolkitRegistryPaths());
         console.log("Toolkit registry\n");

@@ -125,6 +125,27 @@ describe("Toolkit registry", () => {
     await expect(readFile(path.join(paths.agents, "lead.md"), "utf8")).resolves.toBe("local edit\n");
   });
 
+  it("refuses automatic synchronization when the registry has diverged", async () => {
+    const fixture = await createRemote();
+    const home = await temporaryDirectory();
+    const paths = resolveToolkitRegistryPaths(home);
+    await initializeToolkitRegistry(paths, { remote: fixture.remote });
+
+    await git(paths.root, ["config", "user.email", "test@example.test"]);
+    await git(paths.root, ["config", "user.name", "Test"]);
+    await writeFile(path.join(paths.agents, "lead.md"), "local registry commit\n");
+    await git(paths.root, ["add", "agents/lead.md"]);
+    await git(paths.root, ["commit", "-m", "local registry change"]);
+
+    await writeFile(path.join(fixture.source, "agents", "lead.md"), "remote registry commit\n");
+    await git(fixture.source, ["add", "agents/lead.md"]);
+    await git(fixture.source, ["commit", "-m", "remote registry change"]);
+    await git(fixture.source, ["push"]);
+
+    await expect(prepareAgentRegistryForUpdate(paths)).rejects.toThrow("diverged from its remote");
+    await expect(readFile(path.join(paths.agents, "lead.md"), "utf8")).resolves.toBe("local registry commit\n");
+  });
+
   it("uses an existing valid registry when its remote cannot be refreshed", async () => {
     const fixture = await createRemote();
     const home = await temporaryDirectory();
