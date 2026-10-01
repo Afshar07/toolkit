@@ -15,7 +15,13 @@ export { assertWorkspaceManifest, findWorkspaceManifests, readManifest, writeMan
 export { assertManifestPath, resolveManifestPath } from "./workspace/path.js";
 export type { PackageManager, Repository, WorkspaceManifest } from "./workspace/manifest.js";
 export { canonicalAgents, canonicalAgentVersion } from "./agents/registry.js";
+export { bundledAgentRegistry, readCanonicalAgentRegistry, assertCanonicalAgentManifest } from "./agents/registry.js";
+export type { ICanonicalAgentManifest, ICanonicalAgentRegistry } from "./agents/registry.js";
 export { hashAgentContent, inspectAgents, manageAgent, overrideAgent, updateAgents } from "./agents/sync.js";
-export type { AgentStatus, ManagedAgentState, ManagedAgentStatus, UpdateAgentsOptions, UpdateAgentsResult } from "./agents/sync.js";
+export type { AgentStatus, IManageAgentOptions, ManagedAgentState, ManagedAgentStatus, UpdateAgentsOptions, UpdateAgentsResult } from "./agents/sync.js";
+export { initializeToolkitRegistry, inspectToolkitRegistry, localRegistryExists, prepareAgentRegistryForUpdate, readLocalAgentRegistry, resolveOfflineAgentRegistry, updateToolkitRegistry } from "./registry/registry.js";
+export { resolveToolkitRegistryPaths } from "./registry/path.js";
+export type { IPreparedAgentRegistry, IToolkitRegistryInfo } from "./registry/registry.js";
+export type { IToolkitRegistryPaths } from "./registry/path.js";
 export { readAgentManifest, writeAgentManifest } from "./agents/manifest.js";
 export type { AgentOwnershipManifest, InstalledAgentRecord } from "./agents/manifest.js";
