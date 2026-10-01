@@ -1,4 +1,4 @@
-import { mkdir, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, rename, rm } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
 
@@ -16,17 +16,17 @@ export interface IRegistryGitOptions {
   sparsePaths?: readonly string[];
 }
 
-export type RegistryCheckoutValidator = (checkoutRoot: string) => Promise<void>;
+export type RegistryCheckoutValidator<Result = void> = (checkoutRoot: string) => Promise<Result>;
 
 export class RegistryGitError extends Error {
   constructor(message: string, public readonly kind: "unavailable" | "dirty" | "command") { super(message); }
 }
 
-export async function initializeGitRegistry(
+export async function initializeGitRegistry<Result>(
   root: string,
-  validateCheckout: RegistryCheckoutValidator,
+  validateCheckout: RegistryCheckoutValidator<Result>,
   options: IRegistryGitOptions = {},
-): Promise<void> {
+): Promise<Result> {
   const parent = path.dirname(root);
   await mkdir(parent, { recursive: true });
   const temporary = path.join(parent, `.registry-${process.pid}-${Date.now()}.tmp`);
@@ -35,12 +35,24 @@ export async function initializeGitRegistry(
     await git(["-C", temporary, "sparse-checkout", "init", "--no-cone"]);
     await git(["-C", temporary, "sparse-checkout", "set", ...(options.sparsePaths ?? toolkitSparsePaths).map((entry) => `/${entry}/`)]);
     await git(["-C", temporary, "checkout"]);
-    await validateCheckout(temporary);
+    const result = await validateCheckout(temporary);
+    await assertPromotionTargetIsAbsent(root);
     await rename(temporary, root);
+    return result;
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
     throw error;
   }
+}
+
+async function assertPromotionTargetIsAbsent(root: string): Promise<void> {
+  try {
+    await lstat(root);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return;
+    throw error;
+  }
+  throw new RegistryGitError(`Toolkit registry path already exists; refusing to replace it: ${root}`, "command");
 }
 
 export async function updateGitRegistry(root: string): Promise<void> {

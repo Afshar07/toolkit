@@ -4,7 +4,7 @@ import * as path from "pathe";
 import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import { readCanonicalAgentRegistry } from "../../src/agents/registry.js";
-import { updateGitRegistry } from "../../src/registry/git.js";
+import { initializeGitRegistry, updateGitRegistry } from "../../src/registry/git.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
 import { initializeToolkitRegistry, inspectToolkitRegistry, localRegistryExists, prepareAgentRegistryForUpdate, readLocalAgentRegistry, resolveOfflineAgentRegistry } from "../../src/registry/registry.js";
 
@@ -47,6 +47,20 @@ describe("Toolkit registry", () => {
 
     await expect(initializeToolkitRegistry(paths, { remote: fixture.remote })).rejects.toThrow("not a safe directory");
     await expect(readFile(paths.root, "utf8")).resolves.toBe("important file\n");
+  });
+
+  it("refuses a promotion target created after checkout validation", async () => {
+    const fixture = await createRemote();
+    const home = await temporaryDirectory();
+    const paths = resolveToolkitRegistryPaths(home);
+    await mkdir(path.dirname(paths.root), { recursive: true });
+
+    await expect(initializeGitRegistry(paths.root, async () => {
+      await writeFile(paths.root, "created during validation\n");
+    }, { remote: fixture.remote })).rejects.toThrow("refusing to replace");
+
+    await expect(readFile(paths.root, "utf8")).resolves.toBe("created during validation\n");
+    await expect(registryTemporaryDirectories(paths.root)).resolves.toEqual([]);
   });
 
   it.skipIf(process.platform === "win32")("preserves and rejects a symlink at the registry path", async () => {

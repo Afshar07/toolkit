@@ -50,11 +50,10 @@ export async function initializeToolkitRegistry(
     try { return await readLocalAgentRegistry(paths); }
     catch (error) { throw new ToolkitRegistryError(`Refusing to replace the existing registry path. ${error instanceof Error ? error.message : ""}`.trim()); }
   }
-  await initializeGitRegistry(paths.root, async (checkoutRoot) => {
-    await readCanonicalAgentRegistry(path.join(checkoutRoot, "agents"), "local");
+  const registry = await initializeGitRegistry(paths.root, async (checkoutRoot) => {
+    return await readCanonicalAgentRegistry(path.join(checkoutRoot, "agents"), "local");
   }, options);
-  try { return await readLocalAgentRegistry(paths); }
-  catch (error) { throw new ToolkitRegistryError(`Initialized registry failed validation: ${error instanceof Error ? error.message : "validation failed"}`); }
+  return { ...registry, path: paths.agents };
 }
 
 export async function updateToolkitRegistry(paths = resolveToolkitRegistryPaths()): Promise<ICanonicalAgentRegistry> {
