@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import * as path from "pathe";
-import { canonicalAgents, canonicalAgentVersion } from "./registry.js";
+import { bundledAgentRegistry, type ICanonicalAgentRegistry } from "./registry.js";
 import { readAgentManifest, writeAgentManifest, type AgentOwnershipManifest } from "./manifest.js";
 
 export type ManagedAgentState = "current" | "update-available" | "modified" | "missing" | "not-installed" | "unmanaged-collision" | "override";
@@ -26,6 +26,10 @@ export interface UpdateAgentsOptions {
   replaceModified?: ReadonlySet<string>;
 }
 
+export interface IManageAgentOptions {
+  replaceExisting: boolean;
+}
+
 export interface UpdateAgentsResult {
   installed: string[];
   updated: string[];
@@ -44,36 +48,36 @@ export function hashAgentContent(content: string): string {
 }
 
 /** Inspect canonical, managed, overridden, and unrelated project agents without writing. */
-export async function inspectAgents(projectRoot: string): Promise<AgentStatus> {
+export async function inspectAgents(projectRoot: string, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<AgentStatus> {
   const root = await requireProjectRoot(projectRoot);
   const manifest = await readAgentManifest(root);
   const directory = path.join(root, openCodeAgentDirectory);
   await assertSafeAgentDirectory(root, directory);
   const localFiles = await readAgentFileNames(directory);
   const overrides = new Set(manifest.overrides);
-  const canonicalNames = Object.keys(canonicalAgents).map(fileNameToAgentName);
+  const canonicalNames = Object.keys(registry.agents).map(fileNameToAgentName);
   const managed: ManagedAgentStatus[] = [];
 
-  for (const [fileName, content] of Object.entries(canonicalAgents)) {
+  for (const [fileName, content] of Object.entries(registry.agents)) {
     const name = fileNameToAgentName(fileName);
     const record = manifest.installed[name];
     if (overrides.has(name)) {
-      managed.push({ name, fileName, state: "override", installedVersion: record?.version, availableVersion: canonicalAgentVersion });
+      managed.push({ name, fileName, state: "override", installedVersion: record?.version, availableVersion: registry.version });
       continue;
     }
     const localContent = await readRegularAgent(path.join(directory, fileName));
     if (!record) {
-      managed.push({ name, fileName, state: localContent === undefined ? "not-installed" : "unmanaged-collision", availableVersion: canonicalAgentVersion });
+      managed.push({ name, fileName, state: localContent === undefined ? "not-installed" : "unmanaged-collision", availableVersion: registry.version });
       continue;
     }
     if (localContent === undefined) {
-      managed.push({ name, fileName, state: "missing", installedVersion: record.version, availableVersion: canonicalAgentVersion });
+      managed.push({ name, fileName, state: "missing", installedVersion: record.version, availableVersion: registry.version });
       continue;
     }
     const localHash = hashAgentContent(localContent);
     const desiredHash = hashAgentContent(content);
     const state = localHash === desiredHash ? "current" : localHash === record.hash ? "update-available" : "modified";
-    managed.push({ name, fileName, state, installedVersion: record.version, availableVersion: canonicalAgentVersion, localHash });
+    managed.push({ name, fileName, state, installedVersion: record.version, availableVersion: registry.version, localHash });
   }
 
   const ownedNames = new Set([...Object.keys(manifest.installed).filter((name) => canonicalNames.includes(name)), ...manifest.overrides]);
@@ -82,22 +86,22 @@ export async function inspectAgents(projectRoot: string): Promise<AgentStatus> {
 }
 
 /** Safely install and update canonical agents, preserving all unproved or modified files. */
-export async function updateAgents(projectRoot: string, options: UpdateAgentsOptions = {}): Promise<UpdateAgentsResult> {
+export async function updateAgents(projectRoot: string, options: UpdateAgentsOptions = {}, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<UpdateAgentsResult> {
   const root = await requireProjectRoot(projectRoot);
   const manifest = await readAgentManifest(root);
   const directory = path.join(root, openCodeAgentDirectory);
   await ensureSafeDirectory(root, directory);
   const result: UpdateAgentsResult = { installed: [], updated: [], current: [], restored: [], conflicts: [], overrides: [], local: [] };
-  const status = await inspectAgents(root);
+  const status = await inspectAgents(root, registry);
   result.local = status.local;
 
   for (const agent of status.managed) {
-    const content = canonicalAgents[agent.fileName as keyof typeof canonicalAgents];
+    const content = registry.agents[agent.fileName];
     const target = path.join(directory, agent.fileName);
     if (agent.state === "override") { result.overrides.push(agent.name); continue; }
     if (agent.state === "current") {
       result.current.push(agent.name);
-      manifest.installed[agent.name] = installedRecord(content);
+      manifest.installed[agent.name] = installedRecord(content, registry.version);
       continue;
     }
     if (agent.state === "unmanaged-collision" || (agent.state === "modified" && !options.replaceModified?.has(agent.name))) {
@@ -115,7 +119,7 @@ export async function updateAgents(projectRoot: string, options: UpdateAgentsOpt
       await writeFile(target, content, "utf8");
       result.updated.push(agent.name);
     }
-    manifest.installed[agent.name] = installedRecord(content);
+    manifest.installed[agent.name] = installedRecord(content, registry.version);
   }
 
   await writeAgentManifest(root, manifest);
@@ -123,8 +127,8 @@ export async function updateAgents(projectRoot: string, options: UpdateAgentsOpt
 }
 
 /** Mark a canonical name as project-owned without changing its agent file. */
-export async function overrideAgent(projectRoot: string, name: string): Promise<void> {
-  assertCanonicalName(name);
+export async function overrideAgent(projectRoot: string, name: string, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<void> {
+  assertCanonicalName(name, registry);
   const root = await requireProjectRoot(projectRoot);
   const manifest = await readAgentManifest(root);
   if (!manifest.overrides.includes(name)) manifest.overrides.push(name);
@@ -134,31 +138,32 @@ export async function overrideAgent(projectRoot: string, name: string): Promise<
 }
 
 /** Explicitly return an overridden or local collision to Toolkit ownership. */
-export async function manageAgent(projectRoot: string, name: string): Promise<void> {
-  assertCanonicalName(name);
+export async function manageAgent(projectRoot: string, name: string, options: IManageAgentOptions, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<void> {
+  assertCanonicalName(name, registry);
   const root = await requireProjectRoot(projectRoot);
   const manifest = await readAgentManifest(root);
-  const fileName = `${name}.md` as keyof typeof canonicalAgents;
-  const content = canonicalAgents[fileName];
+  const fileName = `${name}.md`;
+  const content = registry.agents[fileName];
   const directory = path.join(root, openCodeAgentDirectory);
   await ensureSafeDirectory(root, directory);
   const target = path.join(directory, fileName);
   const existing = await readRegularAgent(target);
   if (existing === undefined) await writeNewAgent(target, content);
-  else await writeFile(target, content, "utf8");
+  else if (options.replaceExisting) await writeFile(target, content, "utf8");
+  else throw new Error(`Managing ${name} would replace an existing file; set replaceExisting to true.`);
   manifest.overrides = manifest.overrides.filter((candidate) => candidate !== name);
-  manifest.installed[name] = installedRecord(content);
+  manifest.installed[name] = installedRecord(content, registry.version);
   await writeAgentManifest(root, manifest);
 }
 
-function installedRecord(content: string) {
-  return { source: "toolkit" as const, version: canonicalAgentVersion, hash: hashAgentContent(content) };
+function installedRecord(content: string, version: string) {
+  return { source: "toolkit" as const, version, hash: hashAgentContent(content) };
 }
 
 function fileNameToAgentName(fileName: string): string { return fileName.replace(/\.md$/, ""); }
 
-function assertCanonicalName(name: string): void {
-  if (!Object.hasOwn(canonicalAgents, `${name}.md`)) throw new Error(`Unknown canonical agent: ${name}`);
+function assertCanonicalName(name: string, registry: ICanonicalAgentRegistry): void {
+  if (!Object.hasOwn(registry.agents, `${name}.md`)) throw new Error(`Unknown canonical agent: ${name}`);
 }
 
 async function requireProjectRoot(projectRoot: string): Promise<string> {

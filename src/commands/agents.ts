@@ -2,8 +2,9 @@ import { readFile } from "node:fs/promises";
 import * as path from "pathe";
 import { defineCommand } from "citty";
 import * as prompts from "@clack/prompts";
-import { canonicalAgents } from "../agents/registry.js";
+import type { ICanonicalAgentRegistry } from "../agents/registry.js";
 import { inspectAgents, manageAgent, openCodeAgentDirectory, overrideAgent, updateAgents } from "../agents/sync.js";
+import { prepareAgentRegistryForUpdate, resolveOfflineAgentRegistry } from "../registry/registry.js";
 
 export const agentsCommand = defineCommand({
   meta: { name: "agents", description: "Manage reusable Toolkit agents in a project" },
@@ -11,7 +12,11 @@ export const agentsCommand = defineCommand({
     status: defineCommand({
       meta: { name: "status", description: "Show managed, local, and overridden agents" },
       args: { destination: destinationArg() },
-      async run({ args }) { showAgentStatus(await inspectAgents(resolveDestination(args.destination))); },
+      async run({ args }) {
+        const prepared = await resolveOfflineAgentRegistry();
+        showRegistrySource(prepared.registry, prepared.warning);
+        showAgentStatus(await inspectAgents(resolveDestination(args.destination), prepared.registry));
+      },
     }),
     update: defineCommand({
       meta: { name: "update", description: "Safely install and update Toolkit-managed agents" },
@@ -21,15 +26,22 @@ export const agentsCommand = defineCommand({
       },
       async run({ args }) {
         const destination = resolveDestination(args.destination);
-        const status = await inspectAgents(destination);
+        console.log("Updating Toolkit registry...");
+        const prepared = await prepareAgentRegistryForUpdate();
+        if (prepared.warning) console.warn(`⚠ ${prepared.warning}`);
+        if (prepared.action === "bundled") console.warn("Using bundled Toolkit agent definitions.");
+        else if (prepared.action === "existing") console.warn(`Using existing local registry${prepared.commit ? ` at commit ${prepared.commit.slice(0, 8)}` : ""}.`);
+        else console.log(`✓ Registry ${prepared.action}`);
+        console.log("\nChecking project agents...");
+        const status = await inspectAgents(destination, prepared.registry);
         const replaceModified = new Set<string>();
         const interactive = args["non-interactive"] !== true && process.stdin.isTTY && process.stdout.isTTY;
         if (interactive) {
           for (const agent of status.managed.filter((candidate) => candidate.state === "modified")) {
-            if (await resolveModifiedAgent(destination, agent.name, agent.fileName)) replaceModified.add(agent.name);
+            if (await resolveModifiedAgent(destination, agent.name, agent.fileName, prepared.registry)) replaceModified.add(agent.name);
           }
         }
-        const result = await updateAgents(destination, { replaceModified });
+        const result = await updateAgents(destination, { replaceModified }, prepared.registry);
         printUpdateResult(result);
         if (result.conflicts.length) process.exitCode = 1;
       },
@@ -39,7 +51,8 @@ export const agentsCommand = defineCommand({
       args: { name: agentNameArg(), destination: destinationOption() },
       async run({ args }) {
         const name = String(args.name);
-        await overrideAgent(resolveDestination(args.destination), name);
+        const prepared = await resolveOfflineAgentRegistry();
+        await overrideAgent(resolveDestination(args.destination), name, prepared.registry);
         console.log(`Override recorded for ${name}. Toolkit will not update its file.`);
       },
     }),
@@ -48,13 +61,14 @@ export const agentsCommand = defineCommand({
       args: { name: agentNameArg(), destination: destinationOption(), yes: { type: "boolean", description: "Replace the file without prompting" } },
       async run({ args }) {
         const name = String(args.name);
+        const prepared = await resolveOfflineAgentRegistry();
         if (args.yes !== true && process.stdin.isTTY && process.stdout.isTTY) {
           const confirmed = await prompts.confirm({ message: `Replace ${name}.md with Toolkit's canonical definition?`, initialValue: false });
           if (prompts.isCancel(confirmed) || !confirmed) { prompts.cancel("No files changed."); return; }
         } else if (args.yes !== true) {
           throw new Error("Returning an agent to Toolkit management replaces its file. Re-run with --yes.");
         }
-        await manageAgent(resolveDestination(args.destination), name);
+        await manageAgent(resolveDestination(args.destination), name, { replaceExisting: true }, prepared.registry);
         console.log(`${name} is now Toolkit-managed.`);
       },
     }),
@@ -93,7 +107,7 @@ function labelFor(state: string): string {
   } as Record<string, string>)[state] ?? state;
 }
 
-async function resolveModifiedAgent(destination: string, name: string, fileName: string): Promise<boolean> {
+async function resolveModifiedAgent(destination: string, name: string, fileName: string, registry: ICanonicalAgentRegistry): Promise<boolean> {
   while (true) {
     const decision = await prompts.select({
       message: `${fileName} has local modifications.`,
@@ -106,10 +120,19 @@ async function resolveModifiedAgent(destination: string, name: string, fileName:
     if (prompts.isCancel(decision) || decision === "keep") return false;
     if (decision === "update") return true;
     const existing = await readFile(path.join(destination, openCodeAgentDirectory, fileName), "utf8");
-    const desired = canonicalAgents[fileName as keyof typeof canonicalAgents];
+    const desired = registry.agents[fileName];
     console.log(`\n--- ${fileName} (local)\n+++ ${fileName} (Toolkit)`);
     for (const line of existing.split(/\r?\n/)) if (line) console.log(`- ${line}`);
     for (const line of desired.split(/\r?\n/)) if (line) console.log(`+ ${line}`);
+  }
+}
+
+function showRegistrySource(registry: ICanonicalAgentRegistry, warning?: string): void {
+  if (registry.source === "bundled") {
+    console.warn(`Registry: bundled fallback${warning ? ` (${warning})` : ""}`);
+    console.warn("Run `toolkit registry init` or `toolkit agents update` to initialize it.\n");
+  } else {
+    console.log(`Registry: ${registry.path}\n`);
   }
 }
 
