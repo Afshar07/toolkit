@@ -25,6 +25,10 @@ toolkit agents status
 toolkit agents update
 toolkit agents override coder
 toolkit agents manage coder --yes
+
+toolkit registry init
+toolkit registry status
+toolkit registry update
 ```
 
 `scan` is interactive by default. A supplied workspace, name, or output skips that prompt. It records a root Git repository when the workspace itself is a repository, otherwise discovers child Git repositories using relative paths. Every discovered remote is recorded; `origin` is selected for cloning when available, and Toolkit asks you to choose when multiple remotes exist without an `origin`.
@@ -47,13 +51,23 @@ The generated structure includes shared workspace guidance under `.ai/`, project
 
 ## Canonical agents
 
-Toolkit ships canonical definitions for `lead`, `coder`, `researcher`, and
-`external-researcher` under `agents/`, with the set version in
-`agents/manifest.json`. These reusable definitions describe how an agent behaves;
-they are separate from the repository knowledge and routing stored under `.ai/`.
-Git synchronizes changes to Toolkit itself between computers, while the `agents`
-commands safely distribute the definitions into each project's
-`.opencode/agents/` directory.
+Canonical definitions for `lead`, `coder`, `researcher`, and
+`external-researcher` live under `agents/`, with the human-readable set version
+in `agents/manifest.json`. They have a lifecycle independent from the npm CLI:
+
+```text
+GitHub Afshar07/toolkit/agents
+              ↓ sparse Git checkout
+      ~/.toolkit/registry/agents
+              ↓ safe synchronization
+       project/.opencode/agents
+```
+
+The user data path is resolved with Node's platform APIs, so the conceptual
+`~/.toolkit/registry` location works on Linux and Windows. Every project on a
+machine consumes this one local registry; projects are not separate Toolkit
+clones. The npm package still contains bundled definitions as an explicit
+bootstrap/offline fallback.
 
 From a project root, inspect and apply agent updates with:
 
@@ -61,6 +75,48 @@ From a project root, inspect and apply agent updates with:
 toolkit agents status
 toolkit agents update
 ```
+
+`agents status` is entirely local and offline. It compares the project with the
+machine registry immediately and never fetches from GitHub. If the Git registry
+has not been initialized, status clearly identifies the bundled fallback and
+points to `registry init` or `agents update`.
+
+`agents update` is the normal convenience workflow. It lazily initializes the
+sparse registry when needed, otherwise performs a clean fast-forward-only Git
+update, validates `agents/manifest.json`, and then runs the existing safe project
+synchronization. If Git cannot refresh an already-valid registry, Toolkit warns
+and uses its existing commit. If first-time initialization cannot reach GitHub,
+Toolkit warns and uses the bundled definitions. A dirty, invalid, or diverged
+registry is never reset, merged, rebased, deleted, or silently replaced.
+
+For explicit registry management:
+
+```sh
+toolkit registry init     # create and validate the sparse checkout
+toolkit registry status   # local/offline path, version, commit, branch, cleanliness
+toolkit registry update   # require a clean tree and fast-forward only
+```
+
+The registry is a distribution cache, not an editing checkout. Edit canonical
+agents in a normal development clone. For example, on a work computer:
+
+```sh
+cd ~/projects/toolkit
+$EDITOR agents/lead.md
+git add agents/lead.md
+git commit -m "refine lead planning behavior"
+git push
+```
+
+Then, on another computer and inside any project, run:
+
+```sh
+toolkit agents update
+```
+
+The latest definition is fetched and distributed with the same ownership-hash
+protections. No npm publication or CLI update is required for agent-only changes;
+changes to Toolkit code under `src/` still require a normal npm CLI release.
 
 The first update installs missing canonical agents and records their content
 hashes in `.toolkit/agents.json`. Later updates replace a managed file only when

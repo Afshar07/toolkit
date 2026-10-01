@@ -111,11 +111,21 @@ describe("agent synchronization", () => {
     expect(result.overrides).toContain("coder");
     await expect(readFile(agentPath(root, "coder"), "utf8")).resolves.toBe("special project coder\n");
 
-    await manageAgent(root, "coder");
+    await manageAgent(root, "coder", { replaceExisting: true });
     await expect(readFile(agentPath(root, "coder"), "utf8")).resolves.toBe(canonicalAgents["coder.md"]);
     const manifest = await readAgentManifest(root);
     expect(manifest.overrides).not.toContain("coder");
     expect(manifest.installed.coder?.hash).toBe(hashAgentContent(canonicalAgents["coder.md"]));
+  });
+
+  it("requires explicit destructive intent before managing an existing file", async () => {
+    const root = await makeTemporaryDirectory();
+    await updateAgents(root);
+    await overrideAgent(root, "coder");
+    await writeFile(agentPath(root, "coder"), "keep me\n", "utf8");
+
+    await expect(manageAgent(root, "coder", { replaceExisting: false })).rejects.toThrow("replaceExisting");
+    await expect(readFile(agentPath(root, "coder"), "utf8")).resolves.toBe("keep me\n");
   });
 
   it("restores a missing managed agent", async () => {

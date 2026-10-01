@@ -6,6 +6,7 @@ import { doctorCommand } from "./commands/doctor.js";
 import { scanCommand } from "./commands/scan.js";
 import { setupCommand } from "./commands/setup.js";
 import { agentsCommand } from "./commands/agents.js";
+import { registryCommand } from "./commands/registry.js";
 
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
 
@@ -17,6 +18,7 @@ const main = defineCommand({
   },
   subCommands: {
     agents: agentsCommand,
+    registry: registryCommand,
     context: contextCommand,
     scan: scanCommand,
     setup: setupCommand,
