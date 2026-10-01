@@ -32,3 +32,7 @@ export async function publishAgents(author: string, agents: Record<string, strin
 export async function git(repository: string, args: string[]): Promise<void> {
   await execa("git", ["-C", repository, ...args]);
 }
+
+export function normalizeLineEndings(value: string): string {
+  return value.replace(/\r\n/g, "\n");
+}

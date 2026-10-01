@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { overrideAgent, updateAgents } from "../../src/agents/sync.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
 import { initializeToolkitRegistry, prepareAgentRegistryForUpdate } from "../../src/registry/registry.js";
-import { createGitRegistryFixture, publishAgents } from "../helpers/git.js";
+import { createGitRegistryFixture, normalizeLineEndings, publishAgents } from "../helpers/git.js";
 
 const repositoryRoot = path.resolve(import.meta.dirname, "../..");
 const cli = path.join(repositoryRoot, "dist/cli.js");
@@ -58,10 +58,10 @@ describe("compiled CLI", () => {
     const refused = await runCli(["agents", "manage", "coder", "--destination", project], home, false);
     expect(refused.exitCode).not.toBe(0);
     expect(refused.stdout + refused.stderr).toContain("Re-run with --yes");
-    await expect(readFile(path.join(project, ".opencode/agents/coder.md"), "utf8")).resolves.toBe("coder v1\n");
+    expect(normalizeLineEndings(await readFile(path.join(project, ".opencode/agents/coder.md"), "utf8"))).toBe("coder v1\n");
 
     await runCli(["agents", "manage", "coder", "--destination", project, "--yes"], home);
-    await expect(readFile(path.join(project, ".opencode/agents/coder.md"), "utf8")).resolves.toBe("coder v2\n");
+    expect(normalizeLineEndings(await readFile(path.join(project, ".opencode/agents/coder.md"), "utf8"))).toBe("coder v2\n");
   });
 
   it("keeps both status commands offline when the configured remote disappears", async () => {

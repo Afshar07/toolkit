@@ -6,7 +6,7 @@ import { readAgentManifest } from "../../src/agents/manifest.js";
 import { hashAgentContent, updateAgents } from "../../src/agents/sync.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
 import { initializeToolkitRegistry, prepareAgentRegistryForUpdate } from "../../src/registry/registry.js";
-import { createGitRegistryFixture, publishAgents } from "../helpers/git.js";
+import { createGitRegistryFixture, normalizeLineEndings, publishAgents } from "../helpers/git.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
@@ -30,10 +30,12 @@ describe("Git-backed agent distribution", () => {
     await updateAgents(projectA, {}, refreshed.registry);
     await updateAgents(projectB, {}, refreshed.registry);
 
-    await expect(readFile(path.join(paths.agents, "lead.md"), "utf8")).resolves.toBe("lead v2\n");
-    await expect(readFile(path.join(projectA, ".opencode/agents/lead.md"), "utf8")).resolves.toBe("lead v2\n");
-    await expect(readFile(path.join(projectB, ".opencode/agents/reviewer.md"), "utf8")).resolves.toBe("reviewer v1\n");
-    expect((await readAgentManifest(projectA)).installed.lead?.hash).toBe(hashAgentContent("lead v2\n"));
+    expect(normalizeLineEndings(await readFile(path.join(paths.agents, "lead.md"), "utf8"))).toBe("lead v2\n");
+    const installedLead = await readFile(path.join(projectA, ".opencode/agents/lead.md"), "utf8");
+    expect(normalizeLineEndings(installedLead)).toBe("lead v2\n");
+    expect(normalizeLineEndings(await readFile(path.join(projectB, ".opencode/agents/reviewer.md"), "utf8"))).toBe("reviewer v1\n");
+    const installedHash = hashAgentContent(installedLead);
+    expect((await readAgentManifest(projectA)).installed.lead?.hash).toBe(installedHash);
 
     await writeFile(path.join(projectA, ".opencode/agents/lead.md"), "project customization\n");
     await publishAgents(fixture.author, { lead: "lead v3\n", coder: "coder v1\n" }, "v3");
@@ -41,10 +43,10 @@ describe("Git-backed agent distribution", () => {
     const result = await updateAgents(projectA, {}, latest.registry);
 
     expect(result.conflicts).toContain("lead");
-    await expect(readFile(path.join(paths.agents, "lead.md"), "utf8")).resolves.toBe("lead v3\n");
+    expect(normalizeLineEndings(await readFile(path.join(paths.agents, "lead.md"), "utf8"))).toBe("lead v3\n");
     await expect(readFile(path.join(projectA, ".opencode/agents/lead.md"), "utf8")).resolves.toBe("project customization\n");
-    await expect(readFile(path.join(projectA, ".opencode/agents/reviewer.md"), "utf8")).resolves.toBe("reviewer v1\n");
-    expect((await readAgentManifest(projectA)).installed.lead?.hash).toBe(hashAgentContent("lead v2\n"));
+    expect(normalizeLineEndings(await readFile(path.join(projectA, ".opencode/agents/reviewer.md"), "utf8"))).toBe("reviewer v1\n");
+    expect((await readAgentManifest(projectA)).installed.lead?.hash).toBe(installedHash);
   });
 });
 

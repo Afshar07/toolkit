@@ -7,6 +7,7 @@ import { readCanonicalAgentRegistry } from "../../src/agents/registry.js";
 import { initializeGitRegistry, updateGitRegistry } from "../../src/registry/git.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
 import { initializeToolkitRegistry, inspectToolkitRegistry, localRegistryExists, prepareAgentRegistryForUpdate, readLocalAgentRegistry, resolveOfflineAgentRegistry } from "../../src/registry/registry.js";
+import { normalizeLineEndings } from "../helpers/git.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -111,7 +112,7 @@ describe("Toolkit registry", () => {
     await git(fixture.source, ["push"]);
 
     await updateGitRegistry(paths.root);
-    await expect(readFile(path.join(paths.agents, "lead.md"), "utf8")).resolves.toBe("updated lead\n");
+    expect(normalizeLineEndings(await readFile(path.join(paths.agents, "lead.md"), "utf8"))).toBe("updated lead\n");
   });
 
   it("refuses to update a dirty registry", async () => {
