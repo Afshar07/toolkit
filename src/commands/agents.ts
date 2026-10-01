@@ -10,7 +10,7 @@ export const agentsCommand = defineCommand({
   meta: { name: "agents", description: "Manage reusable Toolkit agents in a project" },
   subCommands: {
     status: defineCommand({
-      meta: { name: "status", description: "Show managed, local, and overridden agents" },
+      meta: { name: "status", description: "Show local agent state without refreshing the registry" },
       args: { destination: destinationArg() },
       async run({ args }) {
         const prepared = await resolveOfflineAgentRegistry();
@@ -57,8 +57,8 @@ export const agentsCommand = defineCommand({
       },
     }),
     manage: defineCommand({
-      meta: { name: "manage", description: "Return an agent to Toolkit ownership" },
-      args: { name: agentNameArg(), destination: destinationOption(), yes: { type: "boolean", description: "Replace the file without prompting" } },
+      meta: { name: "manage", description: "Replace an agent and return it to Toolkit ownership" },
+      args: { name: agentNameArg(), destination: destinationOption(), yes: { type: "boolean", description: "Confirm replacement without prompting" } },
       async run({ args }) {
         const name = String(args.name);
         const prepared = await resolveOfflineAgentRegistry();

@@ -45,15 +45,17 @@ Run `toolkit context init` without arguments for a preflight plan and interactiv
 
 For new workspaces in scripts, supply the destination and all context flags with `--non-interactive`; sync and diff can infer values from an existing generated router. Conflicts abort by default. Select `--on-conflict=skip` to keep existing files or `--on-conflict=replace --backup` to replace them safely. Supported policies are `abort`, `skip`, `replace`, and `prompt`; `prompt` is interactive only.
 
-`context validate` checks that the Markdown context entry point and referenced structure are present without changing files. `context agents` creates the four personal OpenCode agent files in either the workspace or global OpenCode agents directory, also without overwriting existing files.
+`context validate` checks that the Markdown context entry point and referenced structure are present without changing files. `context agents` creates the currently bundled personal OpenCode agent files in either the workspace or global OpenCode agents directory, also without overwriting existing files.
 
 The generated structure includes shared workspace guidance under `.ai/`, project guidance under `.ai/projects/`, project-local indexes, and an indexed `ongoing/` directory for each active project. Project and ongoing-task routes are intentionally maintained in Markdown; Toolkit does not infer or rewrite them after initialization.
 
 ## Canonical agents
 
-Canonical definitions for `lead`, `coder`, `researcher`, and
-`external-researcher` live under `agents/`, with the human-readable set version
-in `agents/manifest.json`. They have a lifecycle independent from the npm CLI:
+Canonical definitions live under `agents/`, with their membership and
+human-readable set version in `agents/manifest.json`. The current registry
+includes `lead`, `coder`, `researcher`, and `external-researcher`, but the
+manifest can add or remove names over time. Agent definitions have a lifecycle
+independent from the npm CLI:
 
 ```text
 GitHub Afshar07/toolkit/agents
@@ -137,6 +139,21 @@ Agent files fall into three categories:
   a canonical agent.
 - **Overrides:** canonical names intentionally assigned to the project. Toolkit
   leaves their files untouched during updates.
+
+Toolkit therefore does not own everything in `.opencode/agents/`. A project can
+mix Toolkit-managed and project-local agents, for example:
+
+```text
+.opencode/agents/
+├── lead.md                   Toolkit-managed
+├── coder.md                  Toolkit-managed
+├── migration-specialist.md   project-local
+└── backend-reviewer.md        project-local
+```
+
+Updates ignore the project-local files. If a future canonical registry contains
+the same name, Toolkit reports an unmanaged collision instead of claiming or
+overwriting the file.
 
 If a managed file was edited locally, `agents status` reports it as locally
 modified. `agents update` preserves it by default. In an interactive terminal,

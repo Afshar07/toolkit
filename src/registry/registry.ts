@@ -1,7 +1,7 @@
 import { lstat } from "node:fs/promises";
 import * as path from "pathe";
 import { bundledAgentRegistry, readCanonicalAgentRegistry, type ICanonicalAgentRegistry } from "../agents/registry.js";
-import { initializeGitRegistry, inspectGitRegistry, updateGitRegistry, type IGitRegistryInfo, type IRegistryGitOptions } from "./git.js";
+import { initializeGitRegistry, inspectGitRegistry, RegistryGitError, updateGitRegistry, type IGitRegistryInfo, type IRegistryGitOptions } from "./git.js";
 import { resolveToolkitRegistryPaths, type IToolkitRegistryPaths } from "./path.js";
 
 export interface IToolkitRegistryInfo extends IGitRegistryInfo {
@@ -93,6 +93,7 @@ export async function prepareAgentRegistryForUpdate(
       const info = await inspectGitRegistry(paths.root);
       return { registry, action: "updated", commit: info.commit };
     } catch (error) {
+      if (error instanceof RegistryGitError && (error.kind === "dirty" || error.kind === "diverged")) throw error;
       return { registry: existing, action: "existing", commit: before.commit, warning: `Could not refresh Toolkit registry: ${error instanceof Error ? error.message : "Git failed"}` };
     }
   }

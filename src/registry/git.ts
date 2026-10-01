@@ -19,7 +19,7 @@ export interface IRegistryGitOptions {
 export type RegistryCheckoutValidator<Result = void> = (checkoutRoot: string) => Promise<Result>;
 
 export class RegistryGitError extends Error {
-  constructor(message: string, public readonly kind: "unavailable" | "dirty" | "command") { super(message); }
+  constructor(message: string, public readonly kind: "unavailable" | "dirty" | "diverged" | "command") { super(message); }
 }
 
 export async function initializeGitRegistry<Result>(
@@ -77,6 +77,9 @@ async function git(arguments_: string[]) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") throw new RegistryGitError("Git is required to refresh the Toolkit registry.", "unavailable");
     const message = error instanceof Error ? error.message : "Git command failed";
+    if (arguments_.includes("--ff-only") && message.includes("Not possible to fast-forward")) {
+      throw new RegistryGitError("Toolkit registry has diverged from its remote; refusing to merge or rewrite local history. Restore a clean fast-forwardable registry manually, then retry.", "diverged");
+    }
     throw new RegistryGitError(message, "command");
   }
 }
