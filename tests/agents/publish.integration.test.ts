@@ -11,9 +11,11 @@ import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
 import { createGitRegistryFixture, publishAgents } from "../helpers/git.js";
 
 const temporaryDirectories: string[] = [];
-afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
+afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }))));
 
-describe("agent publication", () => {
+// These integration tests create, clone, commit, push, and refresh real Git repositories.
+// Windows runners need more than Vitest's default five seconds for these operations.
+describe("agent publication", { timeout: 30_000 }, () => {
   it.each([
     { inheritedAutoCrlf: true, localContent: "coder improved\n", label: "autocrlf=true with LF local content" },
     { inheritedAutoCrlf: false, localContent: "coder improved\n", label: "autocrlf=false with LF local content" },
