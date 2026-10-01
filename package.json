@@ -20,7 +20,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/cli.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "verify": "npm run build && npm test"
   },
   "dependencies": {
     "@clack/prompts": "^1.7.0",

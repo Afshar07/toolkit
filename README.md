@@ -86,10 +86,11 @@ points to `registry init` or `agents update`.
 `agents update` is the normal convenience workflow. It lazily initializes the
 sparse registry when needed, otherwise performs a clean fast-forward-only Git
 update, validates `agents/manifest.json`, and then runs the existing safe project
-synchronization. If Git cannot refresh an already-valid registry, Toolkit warns
-and uses its existing commit. If first-time initialization cannot reach GitHub,
-Toolkit warns and uses the bundled definitions. A dirty, invalid, or diverged
-registry is never reset, merged, rebased, deleted, or silently replaced.
+synchronization. If the remote is unavailable but the existing registry is valid
+and clean, Toolkit warns and uses its existing commit. If first-time
+initialization cannot reach GitHub, Toolkit warns and uses the bundled
+definitions. A dirty, invalid, or diverged registry stops the update and is never
+reset, merged, rebased, deleted, or silently replaced.
 
 For explicit registry management:
 
@@ -177,3 +178,11 @@ toolkit agents manage coder --yes
 This command intentionally replaces `coder.md` with the canonical definition and
 records its new ownership hash. Without `--yes`, a non-interactive invocation
 refuses to make that destructive ownership change.
+
+## Release verification
+
+Run `npm run verify` before release. It compiles TypeScript, runs the fast domain
+suite and real local-Git integration tests, exercises the compiled CLI, packs the
+actual npm artifact, installs it into a temporary consumer, and verifies both the
+public API and bundled-agent fallback. Automated tests use temporary local bare
+remotes and never depend on GitHub or the user's Toolkit home.
