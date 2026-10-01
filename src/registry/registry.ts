@@ -19,7 +19,13 @@ export interface IPreparedAgentRegistry {
 export class ToolkitRegistryError extends Error {}
 
 export async function localRegistryExists(paths = resolveToolkitRegistryPaths()): Promise<boolean> {
-  try { return (await lstat(paths.root)).isDirectory(); }
+  try {
+    const stat = await lstat(paths.root);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new ToolkitRegistryError(`Toolkit registry path exists but is not a safe directory: ${paths.root}`);
+    }
+    return true;
+  }
   catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
     throw error;
@@ -44,7 +50,9 @@ export async function initializeToolkitRegistry(
     try { return await readLocalAgentRegistry(paths); }
     catch (error) { throw new ToolkitRegistryError(`Refusing to replace the existing registry path. ${error instanceof Error ? error.message : ""}`.trim()); }
   }
-  await initializeGitRegistry(paths.root, options);
+  await initializeGitRegistry(paths.root, async (checkoutRoot) => {
+    await readCanonicalAgentRegistry(path.join(checkoutRoot, "agents"), "local");
+  }, options);
   try { return await readLocalAgentRegistry(paths); }
   catch (error) { throw new ToolkitRegistryError(`Initialized registry failed validation: ${error instanceof Error ? error.message : "validation failed"}`); }
 }

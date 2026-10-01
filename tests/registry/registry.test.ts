@@ -1,12 +1,12 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
 import { execa } from "execa";
 import { afterEach, describe, expect, it } from "vitest";
 import { readCanonicalAgentRegistry } from "../../src/agents/registry.js";
-import { initializeGitRegistry, updateGitRegistry } from "../../src/registry/git.js";
+import { updateGitRegistry } from "../../src/registry/git.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
-import { inspectToolkitRegistry, localRegistryExists, prepareAgentRegistryForUpdate, readLocalAgentRegistry, resolveOfflineAgentRegistry } from "../../src/registry/registry.js";
+import { initializeToolkitRegistry, inspectToolkitRegistry, localRegistryExists, prepareAgentRegistryForUpdate, readLocalAgentRegistry, resolveOfflineAgentRegistry } from "../../src/registry/registry.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -29,12 +29,38 @@ describe("Toolkit registry", () => {
   });
 
   it("rejects an unrelated existing directory instead of replacing it", async () => {
+    const fixture = await createRemote();
     const home = await temporaryDirectory();
     const paths = resolveToolkitRegistryPaths(home);
     await mkdir(paths.root, { recursive: true });
     await writeFile(path.join(paths.root, "important.txt"), "keep\n");
-    await expect(readLocalAgentRegistry(paths)).rejects.toThrow("Invalid Toolkit registry");
+    await expect(initializeToolkitRegistry(paths, { remote: fixture.remote })).rejects.toThrow("Refusing to replace");
     await expect(readFile(path.join(paths.root, "important.txt"), "utf8")).resolves.toBe("keep\n");
+  });
+
+  it("preserves and rejects an existing regular file at the registry path", async () => {
+    const fixture = await createRemote();
+    const home = await temporaryDirectory();
+    const paths = resolveToolkitRegistryPaths(home);
+    await mkdir(path.dirname(paths.root), { recursive: true });
+    await writeFile(paths.root, "important file\n");
+
+    await expect(initializeToolkitRegistry(paths, { remote: fixture.remote })).rejects.toThrow("not a safe directory");
+    await expect(readFile(paths.root, "utf8")).resolves.toBe("important file\n");
+  });
+
+  it.skipIf(process.platform === "win32")("preserves and rejects a symlink at the registry path", async () => {
+    const fixture = await createRemote();
+    const home = await temporaryDirectory();
+    const paths = resolveToolkitRegistryPaths(home);
+    const target = path.join(home, "existing-registry-target");
+    await mkdir(path.dirname(paths.root), { recursive: true });
+    await mkdir(target);
+    await symlink(target, paths.root, "dir");
+
+    await expect(initializeToolkitRegistry(paths, { remote: fixture.remote })).rejects.toThrow("not a safe directory");
+    await writeFile(path.join(target, "preserved.txt"), "preserved\n");
+    await expect(readFile(path.join(paths.root, "preserved.txt"), "utf8")).resolves.toBe("preserved\n");
   });
 
   it("validates manifests and reads canonical agent content", async () => {
@@ -52,7 +78,7 @@ describe("Toolkit registry", () => {
     const fixture = await createRemote();
     const home = await temporaryDirectory();
     const paths = resolveToolkitRegistryPaths(home);
-    await initializeGitRegistry(paths.root, { remote: fixture.remote });
+    await initializeToolkitRegistry(paths, { remote: fixture.remote });
 
     expect(await localRegistryExists(paths)).toBe(true);
     await expect(readLocalAgentRegistry(paths)).resolves.toMatchObject({ version: "test.1", source: "local" });
@@ -64,7 +90,7 @@ describe("Toolkit registry", () => {
     const fixture = await createRemote();
     const home = await temporaryDirectory();
     const paths = resolveToolkitRegistryPaths(home);
-    await initializeGitRegistry(paths.root, { remote: fixture.remote });
+    await initializeToolkitRegistry(paths, { remote: fixture.remote });
     await writeFile(path.join(fixture.source, "agents", "lead.md"), "updated lead\n");
     await git(fixture.source, ["add", "agents/lead.md"]);
     await git(fixture.source, ["commit", "-m", "update lead"]);
@@ -78,7 +104,7 @@ describe("Toolkit registry", () => {
     const fixture = await createRemote();
     const home = await temporaryDirectory();
     const paths = resolveToolkitRegistryPaths(home);
-    await initializeGitRegistry(paths.root, { remote: fixture.remote });
+    await initializeToolkitRegistry(paths, { remote: fixture.remote });
     await writeFile(path.join(paths.agents, "lead.md"), "local edit\n");
 
     await expect(updateGitRegistry(paths.root)).rejects.toThrow("local modifications");
@@ -89,7 +115,7 @@ describe("Toolkit registry", () => {
     const fixture = await createRemote();
     const home = await temporaryDirectory();
     const paths = resolveToolkitRegistryPaths(home);
-    await initializeGitRegistry(paths.root, { remote: fixture.remote });
+    await initializeToolkitRegistry(paths, { remote: fixture.remote });
     await rm(fixture.remote, { recursive: true, force: true });
 
     await expect(prepareAgentRegistryForUpdate(paths)).resolves.toMatchObject({
@@ -111,6 +137,26 @@ describe("Toolkit registry", () => {
     expect(await localRegistryExists(paths)).toBe(false);
   });
 
+  it("does not promote or retain a temporary checkout with an invalid manifest", async () => {
+    const fixture = await createRemote({ manifest: "{ invalid json", includeLead: true });
+    const home = await temporaryDirectory();
+    const paths = resolveToolkitRegistryPaths(home);
+
+    await expect(initializeToolkitRegistry(paths, { remote: fixture.remote })).rejects.toThrow("Cannot read canonical agent manifest");
+    await expect(access(paths.root)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(registryTemporaryDirectories(paths.root)).resolves.toEqual([]);
+  });
+
+  it("does not promote or retain a temporary checkout with a missing canonical agent", async () => {
+    const fixture = await createRemote({ includeLead: false });
+    const home = await temporaryDirectory();
+    const paths = resolveToolkitRegistryPaths(home);
+
+    await expect(initializeToolkitRegistry(paths, { remote: fixture.remote })).rejects.toThrow("Cannot read canonical agent lead.md");
+    await expect(access(paths.root)).rejects.toMatchObject({ code: "ENOENT" });
+    await expect(registryTemporaryDirectories(paths.root)).resolves.toEqual([]);
+  });
+
   it("resolves status definitions offline without running a Git command", async () => {
     const home = await temporaryDirectory();
     const paths = resolveToolkitRegistryPaths(home);
@@ -126,7 +172,12 @@ describe("Toolkit registry", () => {
   });
 });
 
-async function createRemote(): Promise<{ remote: string; source: string }> {
+interface IRemoteFixtureOptions {
+  manifest?: string;
+  includeLead?: boolean;
+}
+
+async function createRemote(options: IRemoteFixtureOptions = {}): Promise<{ remote: string; source: string }> {
   const root = await temporaryDirectory();
   const remote = path.join(root, "remote.git");
   const source = path.join(root, "source");
@@ -135,14 +186,19 @@ async function createRemote(): Promise<{ remote: string; source: string }> {
   await git(source, ["config", "user.email", "test@example.test"]);
   await git(source, ["config", "user.name", "Test"]);
   await mkdir(path.join(source, "agents"));
-  await writeFile(path.join(source, "agents", "manifest.json"), `${JSON.stringify({ version: "test.1", agents: ["lead"] }, null, 2)}\n`);
-  await writeFile(path.join(source, "agents", "lead.md"), "canonical lead\n");
+  await writeFile(path.join(source, "agents", "manifest.json"), options.manifest ?? `${JSON.stringify({ version: "test.1", agents: ["lead"] }, null, 2)}\n`);
+  if (options.includeLead !== false) await writeFile(path.join(source, "agents", "lead.md"), "canonical lead\n");
   await writeFile(path.join(source, "ignored.txt"), "not sparse\n");
   await git(source, ["add", "."]);
   await git(source, ["commit", "-m", "initial"]);
   await git(source, ["remote", "add", "origin", remote]);
   await git(source, ["push", "-u", "origin", "main"]);
   return { remote, source };
+}
+
+async function registryTemporaryDirectories(registryRoot: string): Promise<string[]> {
+  const parent = path.dirname(registryRoot);
+  return (await readdir(parent)).filter((entry) => entry.startsWith(".registry-") && entry.endsWith(".tmp"));
 }
 
 async function git(cwd: string, args: string[]): Promise<void> {

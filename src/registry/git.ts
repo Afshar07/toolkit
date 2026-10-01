@@ -16,11 +16,17 @@ export interface IRegistryGitOptions {
   sparsePaths?: readonly string[];
 }
 
+export type RegistryCheckoutValidator = (checkoutRoot: string) => Promise<void>;
+
 export class RegistryGitError extends Error {
   constructor(message: string, public readonly kind: "unavailable" | "dirty" | "command") { super(message); }
 }
 
-export async function initializeGitRegistry(root: string, options: IRegistryGitOptions = {}): Promise<void> {
+export async function initializeGitRegistry(
+  root: string,
+  validateCheckout: RegistryCheckoutValidator,
+  options: IRegistryGitOptions = {},
+): Promise<void> {
   const parent = path.dirname(root);
   await mkdir(parent, { recursive: true });
   const temporary = path.join(parent, `.registry-${process.pid}-${Date.now()}.tmp`);
@@ -29,6 +35,7 @@ export async function initializeGitRegistry(root: string, options: IRegistryGitO
     await git(["-C", temporary, "sparse-checkout", "init", "--no-cone"]);
     await git(["-C", temporary, "sparse-checkout", "set", ...(options.sparsePaths ?? toolkitSparsePaths).map((entry) => `/${entry}/`)]);
     await git(["-C", temporary, "checkout"]);
+    await validateCheckout(temporary);
     await rename(temporary, root);
   } catch (error) {
     await rm(temporary, { recursive: true, force: true });
