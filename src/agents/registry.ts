@@ -32,12 +32,17 @@ export async function readCanonicalAgentRegistry(
   const entries = await Promise.all(value.agents.map(async (name) => {
     const fileName = `${name}.md`;
     try {
-      return [fileName, await readFile(path.join(agentsPath, fileName), "utf8")] as const;
+      return [fileName, normalizeCanonicalAgentContent(await readFile(path.join(agentsPath, fileName), "utf8"))] as const;
     } catch (error) {
       throw new Error(`Cannot read canonical agent ${fileName}: ${error instanceof Error ? error.message : "read failed"}`);
     }
   }));
   return { version: value.version, agents: Object.freeze(Object.fromEntries(entries)), source, path: agentsPath };
+}
+
+/** Canonical agent definitions use LF while preserving every other byte represented by UTF-8 text. */
+export function normalizeCanonicalAgentContent(content: string): string {
+  return content.replace(/\r\n/g, "\n");
 }
 
 export function assertCanonicalAgentManifest(value: unknown, manifestPath = "canonical agent manifest"): asserts value is ICanonicalAgentManifest {

@@ -19,6 +19,8 @@ export { bundledAgentRegistry, readCanonicalAgentRegistry, assertCanonicalAgentM
 export type { ICanonicalAgentManifest, ICanonicalAgentRegistry } from "./agents/registry.js";
 export { hashAgentContent, inspectAgents, manageAgent, overrideAgent, updateAgents } from "./agents/sync.js";
 export type { AgentStatus, IManageAgentOptions, ManagedAgentState, ManagedAgentStatus, UpdateAgentsOptions, UpdateAgentsResult } from "./agents/sync.js";
+export { AgentPublishError, incrementCanonicalVersion, publishAgent } from "./agents/publish.js";
+export type { IPublishAgentOptions, IPublishAgentPreview, IPublishAgentResult, IPublishGitIdentity } from "./agents/publish.js";
 export { initializeToolkitRegistry, inspectToolkitRegistry, localRegistryExists, prepareAgentRegistryForUpdate, readLocalAgentRegistry, resolveOfflineAgentRegistry, updateToolkitRegistry } from "./registry/registry.js";
 export { resolveToolkitRegistryPaths } from "./registry/path.js";
 export type { IPreparedAgentRegistry, IToolkitRegistryInfo } from "./registry/registry.js";

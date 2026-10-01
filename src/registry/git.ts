@@ -14,6 +14,7 @@ export interface IGitRegistryInfo {
 export interface IRegistryGitOptions {
   remote?: string;
   sparsePaths?: readonly string[];
+  gitEnvironment?: NodeJS.ProcessEnv;
 }
 
 export type RegistryCheckoutValidator<Result = void> = (checkoutRoot: string) => Promise<Result>;
@@ -31,10 +32,10 @@ export async function initializeGitRegistry<Result>(
   await mkdir(parent, { recursive: true });
   const temporary = path.join(parent, `.registry-${process.pid}-${Date.now()}.tmp`);
   try {
-    await git(["clone", "--filter=blob:none", "--no-checkout", options.remote ?? defaultToolkitRegistryRemote, temporary]);
-    await git(["-C", temporary, "sparse-checkout", "init", "--no-cone"]);
-    await git(["-C", temporary, "sparse-checkout", "set", ...(options.sparsePaths ?? toolkitSparsePaths).map((entry) => `/${entry}/`)]);
-    await git(["-C", temporary, "checkout"]);
+    await git(["clone", "--config", "core.autocrlf=false", "--config", "core.eol=lf", "--filter=blob:none", "--no-checkout", "--", options.remote ?? defaultToolkitRegistryRemote, temporary], options.gitEnvironment);
+    await git(["-C", temporary, "sparse-checkout", "init", "--no-cone"], options.gitEnvironment);
+    await git(["-C", temporary, "sparse-checkout", "set", ...(options.sparsePaths ?? toolkitSparsePaths).map((entry) => `/${entry}/`)], options.gitEnvironment);
+    await git(["-C", temporary, "checkout"], options.gitEnvironment);
     const result = await validateCheckout(temporary);
     await assertPromotionTargetIsAbsent(root);
     await rename(temporary, root);
@@ -55,24 +56,24 @@ async function assertPromotionTargetIsAbsent(root: string): Promise<void> {
   throw new RegistryGitError(`Toolkit registry path already exists; refusing to replace it: ${root}`, "command");
 }
 
-export async function updateGitRegistry(root: string): Promise<void> {
-  const info = await inspectGitRegistry(root);
+export async function updateGitRegistry(root: string, options: IRegistryGitOptions = {}): Promise<void> {
+  const info = await inspectGitRegistry(root, options);
   if (!info.clean) throw new RegistryGitError("Toolkit registry has local modifications; refusing to update it.", "dirty");
-  await git(["-C", root, "pull", "--ff-only"]);
+  await git(["-C", root, "pull", "--ff-only"], options.gitEnvironment);
 }
 
-export async function inspectGitRegistry(root: string): Promise<IGitRegistryInfo> {
+export async function inspectGitRegistry(root: string, options: IRegistryGitOptions = {}): Promise<IGitRegistryInfo> {
   const [{ stdout: commit }, { stdout: branch }, { stdout: status }] = await Promise.all([
-    git(["-C", root, "rev-parse", "HEAD"]),
-    git(["-C", root, "branch", "--show-current"]),
-    git(["-C", root, "status", "--porcelain"]),
+    git(["-C", root, "rev-parse", "HEAD"], options.gitEnvironment),
+    git(["-C", root, "branch", "--show-current"], options.gitEnvironment),
+    git(["-C", root, "status", "--porcelain"], options.gitEnvironment),
   ]);
   return { commit: commit.trim(), branch: branch.trim() || "detached", clean: status.trim().length === 0 };
 }
 
-async function git(arguments_: string[]) {
+async function git(arguments_: string[], environment?: NodeJS.ProcessEnv) {
   try {
-    return await execa("git", arguments_);
+    return await execa("git", arguments_, { env: environment });
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code === "ENOENT") throw new RegistryGitError("Git is required to refresh the Toolkit registry.", "unavailable");

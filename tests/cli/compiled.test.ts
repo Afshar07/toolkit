@@ -76,6 +76,27 @@ describe("compiled CLI", () => {
     await expect(runCli(["agents", "status", project], home)).resolves.toMatchObject({ exitCode: 0 });
     await expect(runCli(["registry", "status"], home)).resolves.toMatchObject({ exitCode: 0 });
   });
+
+  it("exposes publish options and requires explicit non-interactive confirmation for a change", async () => {
+    const help = await runCli(["agents", "publish", "--help"]);
+    expect(help.exitCode).toBe(0);
+
+    const root = await temporaryDirectory();
+    const home = path.join(root, "home");
+    const project = path.join(root, "project");
+    const fixture = await createGitRegistryFixture(root, { coder: "coder v1\n" });
+    const registry = await initializeToolkitRegistry(resolveToolkitRegistryPaths(home), { remote: fixture.remote });
+    await mkdir(project);
+    await updateAgents(project, {}, registry);
+    await writeFile(path.join(project, ".opencode/agents/coder.md"), "local change\n");
+
+    const refused = await runCli(["agents", "publish", "coder", "--destination", project], home, false);
+    expect(refused.exitCode).not.toBe(0);
+    expect(refused.stdout + refused.stderr).toContain("Re-run with --yes");
+    const preview = await runCli(["agents", "publish", "coder", "--destination", project, "--dry-run"], home);
+    expect(preview.stdout + preview.stderr).toContain("Agent publication preview");
+    expect(preview.stdout + preview.stderr).toContain("Dry run complete");
+  });
 });
 
 async function runCli(args: string[], home?: string, reject = true) {

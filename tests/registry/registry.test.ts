@@ -83,8 +83,8 @@ describe("Toolkit registry", () => {
     const agents = path.join(root, "agents");
     await mkdir(agents);
     await writeFile(path.join(agents, "manifest.json"), JSON.stringify({ version: "test.1", agents: ["lead"] }));
-    await writeFile(path.join(agents, "lead.md"), "canonical lead\n");
-    await expect(readCanonicalAgentRegistry(agents)).resolves.toMatchObject({ version: "test.1", agents: { "lead.md": "canonical lead\n" } });
+    await writeFile(path.join(agents, "lead.md"), "canonical lead\r\nsecond line\r\n");
+    await expect(readCanonicalAgentRegistry(agents)).resolves.toMatchObject({ version: "test.1", agents: { "lead.md": "canonical lead\nsecond line\n" } });
     await writeFile(path.join(agents, "manifest.json"), JSON.stringify({ version: "test.1", agents: ["../escape"] }));
     await expect(readCanonicalAgentRegistry(agents)).rejects.toThrow("Invalid canonical agent manifest");
   });
@@ -98,6 +98,8 @@ describe("Toolkit registry", () => {
     expect(await localRegistryExists(paths)).toBe(true);
     await expect(readLocalAgentRegistry(paths)).resolves.toMatchObject({ version: "test.1", source: "local" });
     await expect(inspectToolkitRegistry(paths)).resolves.toMatchObject({ branch: "main", clean: true, version: "test.1" });
+    await expect(gitOutput(paths.root, ["config", "--local", "--get", "core.autocrlf"])).resolves.toBe("false");
+    await expect(gitOutput(paths.root, ["config", "--local", "--get", "core.eol"])).resolves.toBe("lf");
     await expect(access(path.join(paths.root, "ignored.txt"))).rejects.toMatchObject({ code: "ENOENT" });
   });
 
@@ -239,6 +241,10 @@ async function registryTemporaryDirectories(registryRoot: string): Promise<strin
 
 async function git(cwd: string, args: string[]): Promise<void> {
   await execa("git", args, { cwd });
+}
+
+async function gitOutput(cwd: string, args: string[]): Promise<string> {
+  return (await execa("git", args, { cwd })).stdout.trim();
 }
 
 async function temporaryDirectory(): Promise<string> {

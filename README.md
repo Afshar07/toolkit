@@ -23,6 +23,7 @@ toolkit context agents
 
 toolkit agents status
 toolkit agents update
+toolkit agents publish coder
 toolkit agents override coder
 toolkit agents manage coder --yes
 
@@ -104,16 +105,28 @@ toolkit registry status   # local/offline path, version, commit, branch, cleanli
 toolkit registry update   # require a clean tree and fast-forward only
 ```
 
-The registry is a distribution cache, not an editing checkout. Edit canonical
-agents in a normal development clone. For example, on a work computer:
+The registry is a distribution cache, not an editing checkout. To share an
+improvement from the project where it was developed, publish that one canonical
+agent through a temporary authoring checkout:
 
 ```sh
-cd ~/projects/toolkit
-$EDITOR agents/lead.md
-git add agents/lead.md
-git commit -m "refine lead planning behavior"
-git push
+$EDITOR .opencode/agents/coder.md
+toolkit agents publish coder
 ```
+
+Publication writes to the actual Toolkit source repository's default branch; it
+never authors in `~/.toolkit/registry`. It requires Git read and direct-push
+access using the user's existing credentials, but no npm token or npm release.
+Use `--dry-run` for the upstream diff and proposed version without persistent
+changes, or `--yes` to confirm in a non-interactive environment. `--destination`
+selects another project directory.
+
+Canonical agent definitions are LF text. Publishing converts only CRLF line
+endings to LF, preserving all other content and trailing-newline behavior; an
+agent differing from upstream only by CRLF versus LF has no shared change to
+publish. After an actual publication, Toolkit verifies that the project file did
+not change during the operation, installs the published LF bytes locally, and
+records the hash of those exact installed bytes.
 
 Then, on another computer and inside any project, run:
 
@@ -124,6 +137,28 @@ toolkit agents update
 The latest definition is fetched and distributed with the same ownership-hash
 protections. No npm publication or CLI update is required for agent-only changes;
 changes to Toolkit code under `src/` still require a normal npm CLI release.
+
+Publishing refuses a stale managed baseline when the same shared agent changed;
+run `toolkit agents update`, reconcile that agent, and retry. Changes to other
+shared agents do not conflict. An override requires `--include-override` (and is
+returned to Toolkit management after success), while an unowned canonical-name
+file requires `--allow-unmanaged`. These acknowledgements never bypass a known
+stale baseline. Protected-branch or permission push failures are reported and
+never force-pushed or converted into an automatic pull request.
+
+If the remote push succeeds but registry refresh or ownership recording fails,
+Toolkit reports “published successfully; local synchronization incomplete.” Do
+not publish again: run `toolkit agents update` to refresh distribution state,
+then use `toolkit agents manage NAME --yes` only if ownership still needs repair.
+
+New temporary authoring checkouts and machine registries explicitly disable Git
+checkout line-ending conversion. Existing clean registries created with
+`core.autocrlf=true` remain supported without a destructive rewrite: Toolkit
+interprets their validated canonical files as LF and deliberately converts
+eligible unchanged project agents through the normal synchronization flow.
+Dirty or diverged registries remain refused. If an existing registry cannot be
+safely refreshed, preserve it and resolve the reported Git state before running
+`toolkit agents update`; do not reset or edit the registry as an authoring clone.
 
 The first update installs missing canonical agents and records their content
 hashes in `.toolkit/agents.json`. Later updates replace a managed file only when

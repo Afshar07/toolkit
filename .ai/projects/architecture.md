@@ -46,9 +46,18 @@ project / .opencode/agents/
 project ownership state / .toolkit/agents.json
 ```
 
+`toolkit agents publish NAME` is the reverse path: it reads one project agent,
+uses ownership hashes as its conflict baseline, and commits only that definition
+plus the canonical version through a disposable ordinary checkout. The machine
+registry remains a distribution cache and is refreshed only after a successful
+push, before the selected project's ownership is reconciled.
+
 - `agents/` in the Toolkit repository is the authoring source for canonical
   definitions. Its manifest determines membership dynamically; the current names
   are not a fixed architectural list.
+- Canonical agent definitions are LF text. Canonical loading normalizes CRLF from
+  legacy checkouts, while ownership hashes continue to represent the exact bytes
+  installed in each project.
 - `src/registry/*` owns the single machine-wide, sparse Git checkout, including
   initialization, refresh, paths, and Git safety.
 - `src/agents/registry.ts` validates and loads an `agents/` directory without
@@ -98,6 +107,9 @@ behavior. Project-specific files can coexist with managed files under
   checkout, configure sparse checkout, check out, validate the canonical
   registry, re-check that the destination is absent, then promote. Clean up the
   temporary checkout after every pre-promotion failure.
+- New registry and authoring clones set `core.autocrlf=false` and `core.eol=lf`
+  before checkout. Existing clean CRLF registries are interpreted through the LF
+  canonical-loading boundary rather than reset or rewritten in place.
 - Preserve unknown existing filesystem state. Regular files, symlinks, unrelated
   directories, and invalid Git registries at the destination are errors, not
   candidates for automatic repair or deletion.
@@ -111,10 +123,11 @@ behavior. Project-specific files can coexist with managed files under
 
 ### Authoring and tests
 
-Change a canonical agent in a normal Toolkit clone: edit `agents/<name>.md`,
-update `agents/manifest.json` when membership or its human-readable version
-changes, run tests, then commit and push. Never author changes in
-`~/.toolkit/registry`; another machine receives them with `toolkit agents update`.
+Canonical membership is changed in a normal Toolkit clone. Existing canonical
+definitions may also be published from a project with `toolkit agents publish`;
+its deterministic `YYYY.MM.sequence` version supports multiple same-day
+publications. Never author changes in `~/.toolkit/registry`; another project or
+machine receives them with `toolkit agents update`.
 
 Registry and synchronization tests should prefer real temporary filesystems,
 temporary Git repositories, local bare remotes, and an injected temporary home.
