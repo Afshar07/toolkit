@@ -119,11 +119,17 @@ async function isGitRepository(directory: string): Promise<boolean> {
 async function getGitRemotes(directory: string): Promise<GitRemote[]> {
   try {
     const { stdout } = await execa("git", ["-C", directory, "remote"]);
-    const remotes = await Promise.all(stdout.split("\n").filter(Boolean).map(async (name) => {
+    // Drain every Git process before rejecting so callers can safely remove the
+    // scanned directory, particularly on Windows where running Git holds locks.
+    const results = await Promise.allSettled(stdout.split("\n").filter(Boolean).map(async (name) => {
       const { stdout: url } = await execa("git", ["-C", directory, "remote", "get-url", name]);
       assertSafeGitRemoteUrl(url);
       return { name, url };
     }));
+    const remotes = results.map((result) => {
+      if (result.status === "rejected") throw result.reason;
+      return result.value;
+    });
     return remotes.sort((a, b) => (a.name === "origin" ? -1 : b.name === "origin" ? 1 : a.name.localeCompare(b.name)));
   } catch (error) {
     if (error instanceof Error && error.message.includes("Git remote URL")) throw error;

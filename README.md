@@ -253,10 +253,35 @@ GitHub Actions runs the full Ubuntu and Windows matrix for pull requests and for
 
 ## Publishing a release
 
-1. Update the version in `package.json` (and its lockfile entry) and merge the
-   change to `main`.
-2. Create and publish a GitHub Release with a matching tag, such as `v1.1.0` for
-   package version `1.1.0`.
+```sh
+npm run release             # patch bump (default)
+npm run release -- minor    # or major
+npm run release -- --resume # retry current version/HEAD without another bump
+```
+
+Run from a clean checkout (including untracked files) on the GitHub default
+branch, with Git, npm, and authenticated `gh` available, Git push credentials,
+and GitHub write permission. Both origin URLs must identify that GitHub repository.
+No local npm login or publish token is needed.
+
+The script pulls fast-forward only, bumps package.json and package-lock.json,
+commits only those files, and normally pushes the default branch. It waits up to
+15 minutes for the latest exact-commit default-branch push `Verify` attempt to
+succeed before creating an annotated version tag and a generated-notes GitHub
+Release. Failed/cancelled/skipped verification stops immediately with a run URL
+and log command. No force push, tag movement, stash, reset, or rollback is used.
+
+After a partial failure, follow the printed recovery instructions and use
+`--resume` with the same version and HEAD. If the bump was not committed, first
+inspect and finish that version commit. Resume accepts matching existing tags
+(including remote-only tags) and published releases, but refuses tag conflicts
+or draft releases; explicitly publish an existing draft in GitHub. If npm
+publication later fails, rerun Publish rather than creating another release.
+
+The GitHub publication pipeline remains:
+
+1. The released version and its lockfile entry are committed on the default branch.
+2. A GitHub Release uses the matching tag, such as `v1.1.0` for version `1.1.0`.
 3. Publishing the release triggers `.github/workflows/publish.yml`. It resolves
    annotated or lightweight tags to a commit, requires that commit in `main`'s
    history, and waits (for a bounded period) for the latest exact-SHA `Verify`
