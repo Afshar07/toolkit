@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
 import { execa } from "execa";
@@ -14,6 +14,50 @@ const temporaryDirectories: string[] = [];
 afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
 
 describe("compiled CLI", () => {
+  it("supports global offline status, update, override, manage, and publish preview", async () => {
+    const root = await temporaryDirectory();
+    const home = path.join(root, "home");
+    const fixture = await createGitRegistryFixture(root, { sample: "sample v1\n" });
+    await initializeToolkitRegistry(resolveToolkitRegistryPaths(home), { remote: fixture.remote });
+    const config = path.join(home, ".config/opencode");
+    const absent = await runCli(["agents", "status", "--global"], home);
+    expect(absent.stdout).toContain("not installed");
+    await expect(access(config)).rejects.toThrow();
+    await runCli(["agents", "update", "--global", "--non-interactive"], home);
+    const file = path.join(config, "agents/sample.md");
+    await expect(readFile(file, "utf8")).resolves.toBe("sample v1\n");
+    await runCli(["agents", "override", "sample", "--global"], home);
+    await writeFile(file, "personal override\n");
+    await runCli(["agents", "update", "--global", "--non-interactive"], home);
+    await expect(readFile(file, "utf8")).resolves.toBe("personal override\n");
+    await runCli(["agents", "manage", "sample", "--global", "--yes"], home);
+    await expect(readFile(file, "utf8")).resolves.toBe("sample v1\n");
+    await writeFile(file, "publication preview\n");
+    const preview = await runCli(["agents", "publish", "sample", "--global", "--dry-run"], home);
+    expect(preview.stdout).toContain("Dry run complete");
+    expect(preview.stdout).toContain(file);
+    await rm(fixture.remote, { recursive: true, force: true });
+    const offline = await runCli(["agents", "status", "--global"], home);
+    expect(offline.stdout).toContain("locally modified");
+  }, 30_000);
+
+  it("rejects global destination conflicts before touching a registry or global config", async () => {
+    const root = await temporaryDirectory();
+    const home = path.join(root, "home");
+    for (const args of [
+      ["status", root], ["update", root],
+      ["status", "--destination", root], ["update", "--destination", root],
+      ["override", "sample", "--destination", root],
+      ["manage", "sample", "--destination", root, "--yes"],
+      ["publish", "sample", "--destination", root, "--dry-run"],
+    ]) {
+      const result = await runCli(["agents", ...args, "--global"], home, false);
+      expect(result.exitCode).not.toBe(0);
+      expect(result.stdout + result.stderr).toContain("mutually exclusive");
+    }
+    await expect(readdir(root)).resolves.toEqual([]);
+  });
+
   it("exposes and parses help for every public top-level command", async () => {
     await expect(access(cli)).resolves.toBeUndefined();
     const rootHelp = await runCli(["--help"]);
@@ -103,7 +147,7 @@ async function runCli(args: string[], home?: string, reject = true) {
   return execa(process.execPath, [cli, ...args], {
     cwd: repositoryRoot,
     reject,
-    env: { NODE_ENV: "production", NO_COLOR: "1", FORCE_COLOR: "0", ...(home ? { HOME: home, USERPROFILE: home } : {}) },
+    env: { NODE_ENV: "production", NO_COLOR: "1", FORCE_COLOR: "0", ...(home ? { HOME: home, USERPROFILE: home, XDG_CONFIG_HOME: path.join(home, ".config") } : {}) },
   });
 }
 

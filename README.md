@@ -56,6 +56,29 @@ The generated structure includes shared workspace guidance under `.ai/`, project
 
 ## Canonical agents
 
+Project agents remain the default. Use `--global` on `agents status`, `update`,
+`override`, `manage`, or `publish` to select OpenCode's global Markdown definitions:
+
+```sh
+toolkit agents status --global
+toolkit agents update --global
+toolkit agents publish coder --global --dry-run
+toolkit agents override coder --global
+toolkit agents manage coder --global --yes
+```
+
+Global agents live in `$XDG_CONFIG_HOME/opencode/agents` when `XDG_CONFIG_HOME`
+is nonempty and absolute, otherwise `~/.config/opencode/agents` on all platforms.
+Global ownership is stored separately in that config directory's
+`.toolkit/agents.json`; project ownership is unchanged. Global status is offline
+and never creates a missing config directory; update safely creates it.
+`--global` cannot be combined with an explicit destination (including the
+positional directory on status/update). Global files follow the same hash,
+collision, override, explicit replacement, and publication-baseline rules as
+project files. After publication reconciliation fails, use
+`toolkit agents update --global`, and if needed
+`toolkit agents manage NAME --global --yes`, not a project update.
+
 Canonical definitions live under `agents/`, with their membership and
 human-readable set version in `agents/manifest.json`. The current registry
 includes `lead`, `coder`, `researcher`, and `external-researcher`, but the
@@ -226,7 +249,7 @@ actual npm artifact, installs it into a temporary consumer, and verifies both th
 public API and bundled-agent fallback. Automated tests use temporary local bare
 remotes and never depend on GitHub or the user's Toolkit home.
 
-GitHub Actions runs the full Ubuntu and Windows matrix for pull requests and for pushes to `main`; feature-branch pushes do not start a duplicate push run. Superseded pull-request verification is cancelled. A release uses the successful complete `Verify` workflow for the exact tagged commit's `main` push rather than running the suite again.
+GitHub Actions runs the full Ubuntu and Windows matrix for pull requests and for pushes to `main`, except when all changed files are under `agents/`. Agent-only updates skip CI tests and verification; changes that also touch files outside `agents/` still run the full matrix. Feature-branch pushes do not start a duplicate push run. Superseded pull-request verification is cancelled. If repository branch protection requires Verify checks, path-filtered pull requests can remain blocked with pending checks; configure those rules to accommodate agent-only updates. A release uses the successful complete `Verify` workflow for the exact tagged commit's `main` push rather than running the suite again, so an agent-only commit without verification is not eligible for an npm release.
 
 ## Publishing a release
 

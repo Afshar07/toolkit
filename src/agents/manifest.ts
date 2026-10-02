@@ -1,6 +1,6 @@
-import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
-import * as nodePath from "node:path";
+import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import * as path from "pathe";
+import { assertSafeTargetDirectory, resolveAgentTarget, type AgentTarget } from "./target.js";
 
 export interface InstalledAgentRecord {
   source: "toolkit";
@@ -21,9 +21,9 @@ export function emptyAgentManifest(): AgentOwnershipManifest {
   return { schemaVersion: 1, target: "opencode", overrides: [], installed: {} };
 }
 
-export async function readAgentManifest(projectRoot: string): Promise<AgentOwnershipManifest> {
-  const manifestPath = path.join(projectRoot, agentManifestRelativePath);
-  await assertSafeManifestDirectory(projectRoot, path.dirname(manifestPath));
+export async function readAgentManifest(projectRoot: AgentTarget): Promise<AgentOwnershipManifest> {
+  const manifestPath = path.join(resolveAgentTarget(projectRoot).root, agentManifestRelativePath);
+  await assertSafeTargetDirectory(projectRoot, path.dirname(manifestPath));
   let source: string;
   try {
     const stat = await lstat(manifestPath);
@@ -40,11 +40,11 @@ export async function readAgentManifest(projectRoot: string): Promise<AgentOwner
   return value;
 }
 
-export async function writeAgentManifest(projectRoot: string, manifest: AgentOwnershipManifest): Promise<void> {
+export async function writeAgentManifest(projectRoot: AgentTarget, manifest: AgentOwnershipManifest): Promise<void> {
   assertAgentManifest(manifest);
-  const manifestPath = path.join(projectRoot, agentManifestRelativePath);
+  const manifestPath = path.join(resolveAgentTarget(projectRoot).root, agentManifestRelativePath);
   const directory = path.dirname(manifestPath);
-  await assertSafeManifestDirectory(projectRoot, directory);
+  await assertSafeTargetDirectory(projectRoot, directory);
   await mkdir(directory, { recursive: true });
   const temporaryPath = `${manifestPath}.${process.pid}.tmp`;
   try {
@@ -82,24 +82,4 @@ function isAgentName(value: unknown): value is string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-async function assertSafeManifestDirectory(projectRoot: string, directory: string): Promise<void> {
-  const root = path.resolve(projectRoot);
-  const rootReal = await realpath(root);
-  let cursor = directory;
-  while (cursor !== root) {
-    try {
-      const stat = await lstat(cursor);
-      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Agent ownership directory is unsafe: ${cursor}`);
-      const relative = nodePath.relative(rootReal, await realpath(cursor));
-      if (relative === ".." || relative.startsWith(`..${nodePath.sep}`) || nodePath.isAbsolute(relative)) {
-        throw new Error(`Agent ownership directory escapes the project: ${cursor}`);
-      }
-      return;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      cursor = nodePath.dirname(cursor);
-    }
-  }
 }

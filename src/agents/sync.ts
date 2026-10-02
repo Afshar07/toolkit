@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
-import { lstat, mkdir, readFile, readdir, realpath, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import * as nodePath from "node:path";
 import * as path from "pathe";
 import { bundledAgentRegistry, type ICanonicalAgentRegistry } from "./registry.js";
 import { readAgentManifest, writeAgentManifest, type AgentOwnershipManifest } from "./manifest.js";
+import { agentDirectory, assertSafeTargetDirectory, ensureSafeTargetDirectory, resolveAgentTarget, type AgentTarget } from "./target.js";
 
 export type ManagedAgentState = "current" | "update-available" | "modified" | "missing" | "not-installed" | "unmanaged-collision" | "override";
 
@@ -53,11 +54,11 @@ export function hashAgentContent(content: string): string {
 }
 
 /** Inspect canonical, managed, overridden, and unrelated project agents without writing. */
-export async function inspectAgents(projectRoot: string, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<AgentStatus> {
-  const root = await requireProjectRoot(projectRoot);
+export async function inspectAgents(projectRoot: AgentTarget, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<AgentStatus> {
+  const root = resolveAgentTarget(projectRoot);
   const manifest = await readAgentManifest(root);
-  const directory = path.join(root, openCodeAgentDirectory);
-  await assertSafeAgentDirectory(root, directory);
+  const directory = agentDirectory(root);
+  await assertSafeTargetDirectory(root, directory);
   const localFiles = await readAgentFileNames(directory);
   const overrides = new Set(manifest.overrides);
   const canonicalNames = Object.keys(registry.agents).map(fileNameToAgentName);
@@ -91,11 +92,11 @@ export async function inspectAgents(projectRoot: string, registry: ICanonicalAge
 }
 
 /** Safely install and update canonical agents, preserving all unproved or modified files. */
-export async function updateAgents(projectRoot: string, options: UpdateAgentsOptions = {}, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<UpdateAgentsResult> {
-  const root = await requireProjectRoot(projectRoot);
+export async function updateAgents(projectRoot: AgentTarget, options: UpdateAgentsOptions = {}, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<UpdateAgentsResult> {
+  const root = resolveAgentTarget(projectRoot);
   const manifest = await readAgentManifest(root);
-  const directory = path.join(root, openCodeAgentDirectory);
-  await ensureSafeDirectory(root, directory);
+  const directory = agentDirectory(root);
+  await ensureSafeTargetDirectory(root, directory);
   const result: UpdateAgentsResult = { installed: [], updated: [], current: [], restored: [], conflicts: [], overrides: [], local: [] };
   const status = await inspectAgents(root, registry);
   result.local = status.local;
@@ -132,9 +133,9 @@ export async function updateAgents(projectRoot: string, options: UpdateAgentsOpt
 }
 
 /** Mark a canonical name as project-owned without changing its agent file. */
-export async function overrideAgent(projectRoot: string, name: string, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<void> {
+export async function overrideAgent(projectRoot: AgentTarget, name: string, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<void> {
   assertCanonicalName(name, registry);
-  const root = await requireProjectRoot(projectRoot);
+  const root = resolveAgentTarget(projectRoot);
   const manifest = await readAgentManifest(root);
   if (!manifest.overrides.includes(name)) manifest.overrides.push(name);
   manifest.overrides.sort();
@@ -143,14 +144,14 @@ export async function overrideAgent(projectRoot: string, name: string, registry:
 }
 
 /** Explicitly return an overridden or local collision to Toolkit ownership. */
-export async function manageAgent(projectRoot: string, name: string, options: IManageAgentOptions, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<void> {
+export async function manageAgent(projectRoot: AgentTarget, name: string, options: IManageAgentOptions, registry: ICanonicalAgentRegistry = bundledAgentRegistry): Promise<void> {
   assertCanonicalName(name, registry);
-  const root = await requireProjectRoot(projectRoot);
+  const root = resolveAgentTarget(projectRoot);
   const manifest = await readAgentManifest(root);
   const fileName = `${name}.md`;
   const content = registry.agents[fileName];
-  const directory = path.join(root, openCodeAgentDirectory);
-  await ensureSafeDirectory(root, directory);
+  const directory = agentDirectory(root);
+  await ensureSafeTargetDirectory(root, directory);
   const target = path.join(directory, fileName);
   const existing = await readRegularAgent(target);
   if (existing === undefined) await writeNewAgent(target, content);
@@ -163,14 +164,16 @@ export async function manageAgent(projectRoot: string, name: string, options: IM
 
 /** Install published LF bytes only when the project still contains the exact bytes originally inspected. */
 export async function recordPublishedAgent(
-  projectRoot: string,
+  projectRoot: AgentTarget,
   name: string,
   content: string,
   version: string,
   options: IRecordPublishedAgentOptions,
 ): Promise<void> {
-  const root = await requireProjectRoot(projectRoot);
-  const target = path.join(root, openCodeAgentDirectory, `${name}.md`);
+  const root = resolveAgentTarget(projectRoot);
+  const directory = agentDirectory(root);
+  await assertSafeTargetDirectory(root, directory);
+  const target = path.join(directory, `${name}.md`);
   const manifest = await readAgentManifest(root);
   await assertRegularTargetHash(target, hashAgentContent(options.originalContent));
   await writeFile(target, content, "utf8");
@@ -187,13 +190,6 @@ function fileNameToAgentName(fileName: string): string { return fileName.replace
 
 function assertCanonicalName(name: string, registry: ICanonicalAgentRegistry): void {
   if (!Object.hasOwn(registry.agents, `${name}.md`)) throw new Error(`Unknown canonical agent: ${name}`);
-}
-
-async function requireProjectRoot(projectRoot: string): Promise<string> {
-  const root = path.resolve(projectRoot);
-  const stat = await lstat(root).catch(() => undefined);
-  if (!stat?.isDirectory() || stat.isSymbolicLink()) throw new Error(`Agent synchronization requires an existing project directory: ${root}`);
-  return root;
 }
 
 async function readAgentFileNames(directory: string): Promise<string[]> {
@@ -218,27 +214,6 @@ async function readRegularAgent(filePath: string): Promise<string | undefined> {
   }
 }
 
-async function ensureSafeDirectory(root: string, directory: string): Promise<void> {
-  await assertSafeAgentDirectory(root, directory);
-  await mkdir(directory, { recursive: true });
-}
-
-async function assertSafeAgentDirectory(root: string, directory: string): Promise<void> {
-  const rootReal = await realpath(root);
-  let cursor = directory;
-  while (cursor !== root) {
-    try {
-      const stat = await lstat(cursor);
-      if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error(`Agent directory is unsafe: ${cursor}`);
-      if (!isWithin(rootReal, await realpath(cursor))) throw new Error(`Agent directory escapes the project: ${cursor}`);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      cursor = nodePath.dirname(cursor);
-    }
-  }
-}
-
 async function writeNewAgent(target: string, content: string): Promise<void> {
   await mkdir(nodePath.dirname(target), { recursive: true });
   await writeFile(target, content, { encoding: "utf8", flag: "wx" });
@@ -248,9 +223,4 @@ async function assertRegularTargetHash(target: string, expectedHash: string | un
   const content = await readRegularAgent(target);
   if (content === undefined) throw new Error(`Agent path changed during update: ${target}`);
   if (!expectedHash || hashAgentContent(content) !== expectedHash) throw new Error(`Agent path changed during update: ${target}`);
-}
-
-function isWithin(root: string, candidate: string): boolean {
-  const relative = nodePath.relative(root, candidate);
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${nodePath.sep}`) && !nodePath.isAbsolute(relative));
 }

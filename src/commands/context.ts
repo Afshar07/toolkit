@@ -1,4 +1,4 @@
-import os from "node:os";
+import { agentDirectory, resolveGlobalAgentTarget } from "../agents/target.js";
 import { statSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import * as path from "pathe";
@@ -84,7 +84,7 @@ export const contextCommand = defineCommand({
         if (prompts.isCancel(scope)) cancelled();
         const destination = scope === "local"
           ? path.join(process.cwd(), ".opencode", "agents")
-          : path.join(os.homedir(), ".config", "opencode", "agents");
+          : agentDirectory(resolveGlobalAgentTarget());
         if (!await confirm(`Create four OpenCode agent files in ${destination}?`)) cancelled();
         const files = await setupOpenCodeAgents(destination);
         prompts.outro(`Created ${files.length} OpenCode agents in ${destination}. Restart OpenCode to load them.`);
