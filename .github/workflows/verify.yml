@@ -3,7 +3,11 @@ name: Verify
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - 'agents/**'
   pull_request:
+    paths-ignore:
+      - 'agents/**'
 
 permissions:
   contents: read

@@ -39,18 +39,31 @@ normal Toolkit development clone / agents/
                  ↓ Git push and sparse checkout
 machine registry / ~/.toolkit/registry/agents/
                  ↓ canonical loading
-project synchronization / src/agents/sync.ts
+target synchronization / src/agents/sync.ts
                  ↓ current target adapter
 project / .opencode/agents/
 
 project ownership state / .toolkit/agents.json
+global target / <OpenCode config>/agents/
+global ownership state / <OpenCode config>/.toolkit/agents.json
 ```
 
-`toolkit agents publish NAME` is the reverse path: it reads one project agent,
+`toolkit agents publish NAME` is the reverse path: it reads one selected agent,
 uses ownership hashes as its conflict baseline, and commits only that definition
 plus the canonical version through a disposable ordinary checkout. The machine
 registry remains a distribution cache and is refreshed only after a successful
-push, before the selected project's ownership is reconciled.
+push, before the selected target's ownership is reconciled.
+
+`src/agents/target.ts` selects project or global OpenCode paths. Existing string
+roots still mean project targets. `--global` is supported throughout the agent
+lifecycle and is mutually exclusive with an explicit destination, rejected before
+registry/network operations. Global config is absolute nonempty
+`XDG_CONFIG_HOME/opencode`, otherwise `os.homedir()/.config/opencode` on all
+platforms; `context agents` shares this resolver. Offline inspection never
+creates directories. Global writes preflight missing-root ancestors as well as
+agent and metadata directories against symlink/junction redirection before
+bootstrapping. Global ownership never changes project ownership, and global
+publication recovery commands retain `--global`.
 
 - `agents/` in the Toolkit repository is the authoring source for canonical
   definitions. Its manifest determines membership dynamically; the current names

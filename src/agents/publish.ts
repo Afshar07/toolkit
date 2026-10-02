@@ -1,11 +1,11 @@
-import { lstat, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
-import * as nodePath from "node:path";
 import * as path from "pathe";
 import { execa } from "execa";
 import { readAgentManifest } from "./manifest.js";
 import { normalizeCanonicalAgentContent, readCanonicalAgentRegistry } from "./registry.js";
-import { hashAgentContent, openCodeAgentDirectory, recordPublishedAgent } from "./sync.js";
+import { hashAgentContent, recordPublishedAgent } from "./sync.js";
+import { agentDirectory, assertSafeTargetDirectory, resolveAgentTarget, resolveGlobalAgentTarget, type IAgentTarget } from "./target.js";
 import { defaultToolkitRegistryRemote } from "../registry/git.js";
 import { localRegistryExists, prepareAgentRegistryForUpdate } from "../registry/registry.js";
 import { resolveToolkitRegistryPaths, type IToolkitRegistryPaths } from "../registry/path.js";
@@ -30,6 +30,8 @@ export interface IPublishAgentResult {
 
 export interface IPublishAgentOptions {
   destination?: string;
+  global?: boolean;
+  target?: IAgentTarget;
   dryRun?: boolean;
   includeOverride?: boolean;
   allowUnmanaged?: boolean;
@@ -57,7 +59,11 @@ export class AgentPublishError extends Error {
 /** Publish exactly one existing canonical project agent through an isolated ordinary checkout. */
 export async function publishAgent(name: string, options: IPublishAgentOptions = {}): Promise<IPublishAgentResult> {
   assertAgentName(name);
-  const projectRoot = path.resolve(options.destination ?? process.cwd());
+  if (options.global && options.destination !== undefined) throw new AgentPublishError("--global and --destination are mutually exclusive.");
+  if (options.target && (options.global || options.destination !== undefined)) throw new AgentPublishError("target cannot be combined with global or destination.");
+  const projectRoot = options.target ?? (options.global ? resolveGlobalAgentTarget() : resolveAgentTarget(options.destination ?? process.cwd()));
+  const scope = projectRoot.scope === "global" ? "global" : "project";
+  const recovery = `toolkit agents update${scope === "global" ? " --global" : ""}`;
   const agentPath = await safeProjectAgentPath(projectRoot, name);
   const originalLocalContent = await readFile(agentPath, "utf8");
   const canonicalLocalContent = normalizeCanonicalAgentContent(originalLocalContent);
@@ -80,13 +86,13 @@ export async function publishAgent(name: string, options: IPublishAgentOptions =
     const record = ownership.installed[name];
     const overridden = ownership.overrides.includes(name);
     if (overridden && !options.includeOverride) {
-      throw new AgentPublishError(`${name} is a project override. Re-run with --include-override to publish it and return it to Toolkit management.`);
+      throw new AgentPublishError(`${name} is a ${scope} override. Re-run with --include-override to publish it and return it to Toolkit management.`);
     }
     if (!overridden && !record && !options.allowUnmanaged) {
-      throw new AgentPublishError(`${name} is unmanaged in this project, so no trustworthy installed baseline exists. Re-run with --allow-unmanaged to acknowledge this.`);
+      throw new AgentPublishError(`${name} is unmanaged in this ${scope} target, so no trustworthy installed baseline exists. Re-run with --allow-unmanaged to acknowledge this.`);
     }
     if (record && !installedHashMatchesCanonical(record.hash, upstreamContent) && canonicalLocalContent !== upstreamContent) {
-      throw new AgentPublishError(`Publication conflict for ${name}: the shared definition changed since this project installed it. Run \`toolkit agents update\`, reconcile the changes, then publish again.`);
+      throw new AgentPublishError(`Publication conflict for ${name}: the shared definition changed since this ${scope} target installed it. Run \`${recovery}\`, reconcile the changes, then publish again.`);
     }
 
     if (canonicalLocalContent === upstreamContent) {
@@ -135,7 +141,7 @@ export async function publishAgent(name: string, options: IPublishAgentOptions =
       });
       return { outcome: "published", preview, commit, localSynchronizationComplete: true };
     } catch (error) {
-      throw new AgentPublishError(`published successfully; local synchronization incomplete: ${error instanceof Error ? error.message : "reconciliation failed"}. Run \`toolkit agents update\` to recover.`, true);
+      throw new AgentPublishError(`published successfully; local synchronization incomplete: ${error instanceof Error ? error.message : "reconciliation failed"}. Run \`${recovery}\` to recover.`, true);
     }
   } finally {
     await rm(temporaryRoot, { recursive: true, force: true });
@@ -148,25 +154,12 @@ export function incrementCanonicalVersion(current: string, now: Date): string {
   return `${prefix}.${match ? Number(match[1]) + 1 : 1}`;
 }
 
-async function safeProjectAgentPath(projectRoot: string, name: string): Promise<string> {
-  const rootStat = await lstat(projectRoot).catch(() => undefined);
-  if (!rootStat?.isDirectory() || rootStat.isSymbolicLink()) throw new AgentPublishError(`Publication requires an existing project directory: ${projectRoot}`);
-  const rootReal = await realpath(projectRoot);
-  const directory = path.join(projectRoot, openCodeAgentDirectory);
-  let cursor = directory;
-  while (cursor !== projectRoot) {
-    try {
-      const stat = await lstat(cursor);
-      if (!stat.isDirectory() || stat.isSymbolicLink() || !isWithin(rootReal, await realpath(cursor))) throw new AgentPublishError(`Agent directory is unsafe: ${cursor}`);
-      break;
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
-      cursor = nodePath.dirname(cursor);
-    }
-  }
+async function safeProjectAgentPath(projectRoot: IAgentTarget, name: string): Promise<string> {
+  const directory = agentDirectory(projectRoot);
+  await assertSafeTargetDirectory(projectRoot, directory);
   const target = path.join(directory, `${name}.md`);
   const stat = await lstat(target).catch(() => undefined);
-  if (!stat?.isFile() || stat.isSymbolicLink()) throw new AgentPublishError(`Project agent must be an existing regular file: ${target}`);
+  if (!stat?.isFile() || stat.isSymbolicLink()) throw new AgentPublishError(`Selected agent must be an existing regular file: ${target}`);
   return target;
 }
 
@@ -217,9 +210,4 @@ function assertSafeRemote(remote: string): void {
 
 function assertAgentName(name: string): void {
   if (!/^[a-z0-9][a-z0-9-]*$/.test(name)) throw new AgentPublishError(`Invalid agent name: ${name}`);
-}
-
-function isWithin(root: string, candidate: string): boolean {
-  const relative = nodePath.relative(root, candidate);
-  return relative === "" || (relative !== ".." && !relative.startsWith(`..${nodePath.sep}`) && !nodePath.isAbsolute(relative));
 }

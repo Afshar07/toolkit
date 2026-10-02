@@ -4,6 +4,7 @@ import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
 import { AiContextSetupError, defaultAiContextOptions, setupAiContext } from "../../src/context/setup.js";
 import { OpenCodeAgentSetupError, setupOpenCodeAgents } from "../../src/agents/setup.js";
+import { canonicalAgents } from "../../src/agents/registry.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -123,24 +124,15 @@ describe("setupAiContext", () => {
 });
 
 describe("setupOpenCodeAgents", () => {
-  it("creates the four personal OpenCode agent files", async () => {
+  it("installs the current canonical OpenCode agent files", async () => {
     const directory = await makeTemporaryDirectory();
 
-    await expect(setupOpenCodeAgents(directory)).resolves.toEqual([
-      "lead.md",
-      "researcher.md",
-      "external-researcher.md",
-      "coder.md",
-    ]);
-    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("mode: primary");
-    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
-    await expect(readFile(path.join(directory, "lead.md"), "utf8")).resolves.toContain("workspace lead engineer");
-    await expect(readFile(path.join(directory, "researcher.md"), "utf8")).resolves.toContain("read-only code researcher");
-    await expect(readFile(path.join(directory, "researcher.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
-    await expect(readFile(path.join(directory, "external-researcher.md"), "utf8")).resolves.toContain("webfetch: allow");
-    await expect(readFile(path.join(directory, "external-researcher.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
-    await expect(readFile(path.join(directory, "coder.md"), "utf8")).resolves.toContain("edit: allow");
-    await expect(readFile(path.join(directory, "coder.md"), "utf8")).resolves.toContain("active workspace AGENTS.md");
+    const fileNames = Object.keys(canonicalAgents);
+    await expect(setupOpenCodeAgents(directory)).resolves.toEqual(fileNames);
+    await expect(readdir(directory)).resolves.toEqual([...fileNames].sort());
+    for (const [fileName, content] of Object.entries(canonicalAgents)) {
+      await expect(readFile(path.join(directory, fileName), "utf8")).resolves.toBe(content);
+    }
   });
 
   it("does not overwrite any existing personal agent", async () => {

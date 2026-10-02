@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { incrementCanonicalVersion, publishAgent } from "../../src/agents/publish.js";
 import { readAgentManifest } from "../../src/agents/manifest.js";
 import { hashAgentContent, overrideAgent, updateAgents } from "../../src/agents/sync.js";
+import { agentDirectory, resolveGlobalAgentTarget } from "../../src/agents/target.js";
 import { initializeToolkitRegistry, prepareAgentRegistryForUpdate, readLocalAgentRegistry } from "../../src/registry/registry.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
 import { createGitRegistryFixture, publishAgents } from "../helpers/git.js";
@@ -16,6 +17,51 @@ afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory)
 // These integration tests create, clone, commit, push, and refresh real Git repositories.
 // Windows runners need more than Vitest's default five seconds for these operations.
 describe("agent publication", { timeout: 30_000 }, () => {
+  it("previews and publishes global definitions with isolated ownership and LF reconciliation", async () => {
+    const setup = await fixture();
+    const target = resolveGlobalAgentTarget({ home: path.join(setup.root, "global-home"), env: {} });
+    await updateAgents(target, {}, setup.registry);
+    const file = path.join(agentDirectory(target), "coder.md");
+    const ownershipPath = path.join(target.root, ".toolkit/agents.json");
+    const projectBefore = await readAgentManifest(setup.project);
+    const ownershipBefore = await readFile(ownershipPath, "utf8");
+    await writeFile(file, "global improvement\r\n");
+    const options = { ...publishOptions(setup), destination: undefined, target };
+    const preview = await publishAgent("coder", { ...options, dryRun: true });
+    expect(preview.outcome).toBe("dry-run");
+    expect(preview.preview.agentPath).toBe(file);
+    expect(await remoteHead(setup.remote)).toBe(setup.initialHead);
+    await expect(readFile(ownershipPath, "utf8")).resolves.toBe(ownershipBefore);
+    const result = await publishAgent("coder", options);
+    expect(result.outcome).toBe("published");
+    await expect(readFile(file, "utf8")).resolves.toBe("global improvement\n");
+    expect((await readAgentManifest(target)).installed.coder?.hash).toBe(hashAgentContent("global improvement\n"));
+    expect(await readAgentManifest(setup.project)).toEqual(projectBefore);
+  });
+
+  it("uses global conflict baselines and global recovery after successful push", async () => {
+    const setup = await fixture();
+    const target = resolveGlobalAgentTarget({ home: path.join(setup.root, "global-home"), env: {} });
+    await updateAgents(target, {}, setup.registry);
+    const file = path.join(agentDirectory(target), "coder.md");
+    const options = { ...publishOptions(setup), destination: undefined, target };
+    await writeFile(file, "global edit\n");
+    await publishAgents(setup.author, { lead: "lead v1\n", coder: "upstream edit\n" }, "upstream");
+    await expect(publishAgent("coder", options)).rejects.toThrow("toolkit agents update --global");
+    const refreshed = await prepareAgentRegistryForUpdate(setup.paths, { gitEnvironment: setup.gitEnvironment });
+    await updateAgents(target, { replaceModified: new Set(["coder"]) }, refreshed.registry);
+    await overrideAgent(target, "coder", refreshed.registry);
+    await writeFile(file, "published global override\r\n");
+    await expect(publishAgent("coder", options)).rejects.toThrow("--include-override");
+    await expect(publishAgent("coder", {
+      ...options,
+      includeOverride: true,
+      beforeReconcile: async () => writeFile(file, "changed while publishing\n"),
+    })).rejects.toMatchObject({ published: true, message: expect.stringContaining("toolkit agents update --global") });
+    await expect(readFile(file, "utf8")).resolves.toBe("changed while publishing\n");
+    expect((await readAgentManifest(target)).overrides).toContain("coder");
+  });
+
   it.each([
     { inheritedAutoCrlf: true, localContent: "coder improved\n", label: "autocrlf=true with LF local content" },
     { inheritedAutoCrlf: false, localContent: "coder improved\n", label: "autocrlf=false with LF local content" },

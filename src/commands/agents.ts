@@ -4,7 +4,8 @@ import { defineCommand } from "citty";
 import * as prompts from "@clack/prompts";
 import type { ICanonicalAgentRegistry } from "../agents/registry.js";
 import { publishAgent, type IPublishAgentPreview } from "../agents/publish.js";
-import { inspectAgents, manageAgent, openCodeAgentDirectory, overrideAgent, updateAgents } from "../agents/sync.js";
+import { inspectAgents, manageAgent, overrideAgent, updateAgents } from "../agents/sync.js";
+import { agentDirectory, resolveAgentTarget, resolveGlobalAgentTarget, type IAgentTarget } from "../agents/target.js";
 import { prepareAgentRegistryForUpdate, resolveOfflineAgentRegistry } from "../registry/registry.js";
 
 export const agentsCommand = defineCommand({
@@ -12,28 +13,31 @@ export const agentsCommand = defineCommand({
   subCommands: {
     status: defineCommand({
       meta: { name: "status", description: "Show local agent state without refreshing the registry" },
-      args: { destination: destinationArg() },
-      async run({ args }) {
+      args: { destination: destinationArg(), global: globalArg() },
+      async run({ args, rawArgs }) {
+        const destination = resolveDestination(args.destination, args.global === true, rawArgs);
         const prepared = await resolveOfflineAgentRegistry();
-        showRegistrySource(prepared.registry, prepared.warning);
-        showAgentStatus(await inspectAgents(resolveDestination(args.destination), prepared.registry));
+        showRegistrySource(prepared.registry, prepared.warning, args.global === true);
+        console.log(`Target: ${agentDirectory(destination)}`);
+        showAgentStatus(await inspectAgents(destination, prepared.registry));
       },
     }),
     update: defineCommand({
       meta: { name: "update", description: "Safely install and update Toolkit-managed agents" },
       args: {
         destination: destinationArg(),
+        global: globalArg(),
         "non-interactive": { type: "boolean", description: "Preserve conflicts without prompting" },
       },
-      async run({ args }) {
-        const destination = resolveDestination(args.destination);
+      async run({ args, rawArgs }) {
+        const destination = resolveDestination(args.destination, args.global === true, rawArgs);
         console.log("Updating Toolkit registry...");
         const prepared = await prepareAgentRegistryForUpdate();
         if (prepared.warning) console.warn(`⚠ ${prepared.warning}`);
         if (prepared.action === "bundled") console.warn("Using bundled Toolkit agent definitions.");
         else if (prepared.action === "existing") console.warn(`Using existing local registry${prepared.commit ? ` at commit ${prepared.commit.slice(0, 8)}` : ""}.`);
         else console.log(`✓ Registry ${prepared.action}`);
-        console.log("\nChecking project agents...");
+        console.log(`\nChecking ${destination.scope} agents: ${agentDirectory(destination)}`);
         const status = await inspectAgents(destination, prepared.registry);
         const replaceModified = new Set<string>();
         const interactive = args["non-interactive"] !== true && process.stdin.isTTY && process.stdout.isTTY;
@@ -49,18 +53,20 @@ export const agentsCommand = defineCommand({
     }),
     override: defineCommand({
       meta: { name: "override", description: "Mark a canonical agent as project-owned" },
-      args: { name: agentNameArg(), destination: destinationOption() },
-      async run({ args }) {
+      args: { name: agentNameArg(), destination: destinationOption(), global: globalArg() },
+      async run({ args, rawArgs }) {
+        const destination = resolveDestination(args.destination, args.global === true, rawArgs);
         const name = String(args.name);
         const prepared = await resolveOfflineAgentRegistry();
-        await overrideAgent(resolveDestination(args.destination), name, prepared.registry);
+        await overrideAgent(destination, name, prepared.registry);
         console.log(`Override recorded for ${name}. Toolkit will not update its file.`);
       },
     }),
     manage: defineCommand({
       meta: { name: "manage", description: "Replace an agent and return it to Toolkit ownership" },
-      args: { name: agentNameArg(), destination: destinationOption(), yes: { type: "boolean", description: "Confirm replacement without prompting" } },
-      async run({ args }) {
+      args: { name: agentNameArg(), destination: destinationOption(), global: globalArg(), yes: { type: "boolean", description: "Confirm replacement without prompting" } },
+      async run({ args, rawArgs }) {
+        const destination = resolveDestination(args.destination, args.global === true, rawArgs);
         const name = String(args.name);
         const prepared = await resolveOfflineAgentRegistry();
         if (args.yes !== true && process.stdin.isTTY && process.stdout.isTTY) {
@@ -69,7 +75,7 @@ export const agentsCommand = defineCommand({
         } else if (args.yes !== true) {
           throw new Error("Returning an agent to Toolkit management replaces its file. Re-run with --yes.");
         }
-        await manageAgent(resolveDestination(args.destination), name, { replaceExisting: true }, prepared.registry);
+        await manageAgent(destination, name, { replaceExisting: true }, prepared.registry);
         console.log(`${name} is now Toolkit-managed.`);
       },
     }),
@@ -78,15 +84,17 @@ export const agentsCommand = defineCommand({
       args: {
         name: agentNameArg(),
         destination: destinationOption(),
+        global: globalArg(),
         "dry-run": { type: "boolean", description: "Fetch and preview without committing, pushing, or changing local state" },
         yes: { type: "boolean", description: "Publish without the final interactive confirmation" },
         "include-override": { type: "boolean", description: "Explicitly publish an override and return it to Toolkit management" },
         "allow-unmanaged": { type: "boolean", description: "Explicitly publish a canonical-name file without an installed baseline" },
       },
-      async run({ args }) {
+      async run({ args, rawArgs }) {
+        const destination = resolveDestination(args.destination, args.global === true, rawArgs);
         const interactive = process.stdin.isTTY && process.stdout.isTTY;
         const result = await publishAgent(String(args.name), {
-          destination: resolveDestination(args.destination),
+          target: destination,
           dryRun: args["dry-run"] === true,
           includeOverride: args["include-override"] === true,
           allowUnmanaged: args["allow-unmanaged"] === true,
@@ -100,7 +108,7 @@ export const agentsCommand = defineCommand({
         });
         if (result.outcome === "unchanged") console.log("Nothing to publish; the local definition already matches upstream.");
         else if (result.outcome === "dry-run") console.log("Dry run complete; no persistent state was changed.");
-        else console.log(`Published successfully (${result.commit?.slice(0, 8)}); the project agent is Toolkit-managed.`);
+        else console.log(`Published successfully (${result.commit?.slice(0, 8)}); the ${destination.scope} agent is Toolkit-managed.`);
       },
     }),
   },
@@ -109,7 +117,11 @@ export const agentsCommand = defineCommand({
 function destinationArg() { return { type: "positional" as const, description: "Project directory", required: false }; }
 function destinationOption() { return { type: "string" as const, description: "Project directory" }; }
 function agentNameArg() { return { type: "positional" as const, description: "Canonical agent name", required: true }; }
-function resolveDestination(value: unknown): string { return path.resolve(typeof value === "string" ? value : process.cwd()); }
+function globalArg() { return { type: "boolean" as const, description: "Use global OpenCode agents instead of project agents" }; }
+function resolveDestination(value: unknown, global?: boolean, rawArgs: string[] = []): IAgentTarget {
+  if (global && (value !== undefined || rawArgs.some((arg) => arg === "--destination" || arg.startsWith("--destination=")))) throw new Error("--global and --destination (including a positional destination) are mutually exclusive.");
+  return global ? resolveGlobalAgentTarget() : resolveAgentTarget(typeof value === "string" ? value : process.cwd());
+}
 
 function showAgentStatus(status: Awaited<ReturnType<typeof inspectAgents>>): void {
   console.log("Toolkit agents");
@@ -138,7 +150,7 @@ function labelFor(state: string): string {
   } as Record<string, string>)[state] ?? state;
 }
 
-async function resolveModifiedAgent(destination: string, name: string, fileName: string, registry: ICanonicalAgentRegistry): Promise<boolean> {
+async function resolveModifiedAgent(destination: IAgentTarget, name: string, fileName: string, registry: ICanonicalAgentRegistry): Promise<boolean> {
   while (true) {
     const decision = await prompts.select({
       message: `${fileName} has local modifications.`,
@@ -150,7 +162,7 @@ async function resolveModifiedAgent(destination: string, name: string, fileName:
     });
     if (prompts.isCancel(decision) || decision === "keep") return false;
     if (decision === "update") return true;
-    const existing = await readFile(path.join(destination, openCodeAgentDirectory, fileName), "utf8");
+    const existing = await readFile(path.join(agentDirectory(destination), fileName), "utf8");
     const desired = registry.agents[fileName];
     console.log(`\n--- ${fileName} (local)\n+++ ${fileName} (Toolkit)`);
     for (const line of existing.split(/\r?\n/)) if (line) console.log(`- ${line}`);
@@ -158,10 +170,10 @@ async function resolveModifiedAgent(destination: string, name: string, fileName:
   }
 }
 
-function showRegistrySource(registry: ICanonicalAgentRegistry, warning?: string): void {
+function showRegistrySource(registry: ICanonicalAgentRegistry, warning?: string, global?: boolean): void {
   if (registry.source === "bundled") {
     console.warn(`Registry: bundled fallback${warning ? ` (${warning})` : ""}`);
-    console.warn("Run `toolkit registry init` or `toolkit agents update` to initialize it.\n");
+    console.warn(`Run \`toolkit registry init\` or \`toolkit agents update${global ? " --global" : ""}\` to initialize it.\n`);
   } else {
     console.log(`Registry: ${registry.path}\n`);
   }
@@ -179,7 +191,7 @@ function printUpdateResult(result: Awaited<ReturnType<typeof updateAgents>>): vo
 
 function printPublishPreview(preview: IPublishAgentPreview): void {
   console.log("Agent publication preview");
-  console.log(`Project agent: ${preview.agentPath}`);
+  console.log(`Agent: ${preview.agentPath}`);
   console.log(`Target: ${preview.repository} (${preview.branch})`);
   console.log(`Local definition differs: ${preview.differs ? "yes" : "no"}`);
   if (preview.proposedVersion) console.log(`Canonical version: ${preview.currentVersion} → ${preview.proposedVersion}`);

@@ -18,6 +18,8 @@ export { canonicalAgents, canonicalAgentVersion } from "./agents/registry.js";
 export { bundledAgentRegistry, readCanonicalAgentRegistry, assertCanonicalAgentManifest } from "./agents/registry.js";
 export type { ICanonicalAgentManifest, ICanonicalAgentRegistry } from "./agents/registry.js";
 export { hashAgentContent, inspectAgents, manageAgent, overrideAgent, updateAgents } from "./agents/sync.js";
+export { agentDirectory, resolveAgentTarget, resolveGlobalAgentTarget } from "./agents/target.js";
+export type { AgentTarget, IAgentTarget } from "./agents/target.js";
 export type { AgentStatus, IManageAgentOptions, ManagedAgentState, ManagedAgentStatus, UpdateAgentsOptions, UpdateAgentsResult } from "./agents/sync.js";
 export { AgentPublishError, incrementCanonicalVersion, publishAgent } from "./agents/publish.js";
 export type { IPublishAgentOptions, IPublishAgentPreview, IPublishAgentResult, IPublishGitIdentity } from "./agents/publish.js";
