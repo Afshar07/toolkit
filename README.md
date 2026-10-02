@@ -261,7 +261,9 @@ actual npm artifact, installs it into a temporary consumer, and verifies both th
 public API and bundled-agent fallback. Automated tests use temporary local bare
 remotes and never depend on GitHub or the user's Toolkit home.
 
-GitHub Actions runs the full Ubuntu and Windows matrix for pull requests and for pushes to `main`, except when all changed files are under `agents/`. Agent-only updates skip CI tests and verification; changes that also touch files outside `agents/` still run the full matrix. Feature-branch pushes do not start a duplicate push run. Superseded pull-request verification is cancelled. If repository branch protection requires Verify checks, path-filtered pull requests can remain blocked with pending checks; configure those rules to accommodate agent-only updates. A release uses the successful complete `Verify` workflow for the exact tagged commit's `main` push rather than running the suite again, so an agent-only commit without verification is not eligible for an npm release.
+GitHub Actions runs `Verify` on Ubuntu for pull requests and pushes to `main`, except when all changed files are under `agents/`. Mixed changes still run Ubuntu verification. Feature-branch pushes do not start a duplicate push run, and superseded pull-request verification is cancelled. If branch protection requires Verify checks, path-filtered pull requests can remain blocked with pending checks; configure those rules to accommodate agent-only updates.
+
+`Release Verify` (`.github/workflows/release-verify.yml`) runs the full Ubuntu/Windows matrix on pushes to `main` that change `package.json` or `package-lock.json`, including version bumps and dependency changes. It never cancels in-progress runs and does not run on pull requests; do not require it as a PR check. Releases require this successful complete workflow for the exact tagged commit's default-branch push. Ordinary `Verify` success alone, or an agent-only commit without Release Verify, cannot qualify for npm publication.
 
 ## Publishing a release
 
@@ -278,7 +280,7 @@ No local npm login or publish token is needed.
 
 The script pulls fast-forward only, bumps package.json and package-lock.json,
 commits only those files, and normally pushes the default branch. It waits up to
-15 minutes for the latest exact-commit default-branch push `Verify` attempt to
+15 minutes for the latest exact-commit default-branch push `Release Verify` attempt to
 succeed before creating an annotated version tag and a generated-notes GitHub
 Release. Failed/cancelled/skipped verification stops immediately with a run URL
 and log command. No force push, tag movement, stash, reset, or rollback is used.
@@ -296,7 +298,7 @@ The GitHub publication pipeline remains:
 2. A GitHub Release uses the matching tag, such as `v1.1.0` for version `1.1.0`.
 3. Publishing the release triggers `.github/workflows/publish.yml`. It resolves
    annotated or lightweight tags to a commit, requires that commit in `main`'s
-   history, and waits (for a bounded period) for the latest exact-SHA `Verify`
+   history, and waits (for a bounded period) for the latest exact-SHA `Release Verify`
    push run. Missing, failed, cancelled, skipped, or timed-out verification stops
    publication. After the qualifying verification is available, re-run the
    failed Publish workflow from GitHub Actions rather than moving the tag.

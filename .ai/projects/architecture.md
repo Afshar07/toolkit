@@ -178,18 +178,25 @@ inherited test environment cannot suppress informational help output.
 
 `npm run verify` is the release-confidence gate: it builds TypeScript before
 running domain, real-Git, compiled-CLI, packed-artifact, and clean-consumer tests.
-CI runs this same command on Ubuntu and Windows; package tests must exercise only
+Release CI runs this same command on Ubuntu and Windows; package tests must exercise only
 the supported public exports and assets present in the npm tarball.
 
 ## CI and releases
 
 `.github/workflows/verify.yml` verifies pull requests and pushes to `main`, not
 every feature-branch push. Both triggers ignore changes exclusively under
-`agents/**`; mixed changes still run the complete Ubuntu/Windows matrix. This
+`agents/**`; mixed changes still run the single Ubuntu job. This
 skip does not weaken npm release gates. A skipped workflow can leave required
 branch-protection checks pending; repository settings must accommodate this
 separately. An agent-only commit without exact-SHA verification cannot qualify
 for npm publication.
+
+`.github/workflows/release-verify.yml` (Release Verify) runs the complete
+Ubuntu/Windows matrix only on pushes to `main` changing `package.json` or
+`package-lock.json`, covering version bumps and dependency changes. It runs
+`npm ci` and `npm run verify`, never cancels in-progress runs, and has no PR
+trigger. Do not require this path-filtered release workflow as a PR check.
+Routine Verify success alone cannot satisfy the npm release gate.
 
 `npm run release` runs `scripts/release.mjs` from the source checkout. It defaults
 to a patch bump; `npm run release -- minor` and `-- major` select larger bumps.
@@ -201,9 +208,9 @@ as part of ordinary agent validation.
   access. Pull fast-forward only; never reset, stash, force-push, or move tags.
 - Bump with lifecycle scripts disabled, commit only `package.json` and
   `package-lock.json`, then normally push the default branch. Wait up to 15
-  minutes for the latest exact-SHA default-branch push Verify attempt to succeed
+  minutes for the latest exact-SHA default-branch push Release Verify attempt to succeed
   before creating an annotated tag at that SHA and a generated-notes GitHub
-  Release. Failed/cancelled/skipped Verify attempts stop with diagnostics.
+  Release. Failed/cancelled/skipped Release Verify attempts stop with diagnostics.
 - `npm run release -- --resume` retries the current version and HEAD without
   another bump. Refuse mismatching tags, changed resume HEAD, and draft releases;
   matching existing tags/releases are accepted. Partial failures retain state
@@ -215,7 +222,7 @@ as part of ordinary agent validation.
 
 `.github/workflows/publish.yml` remains the only npm publishing path, using OIDC.
 `scripts/release-gate.mjs` requires the tagged commit in default-branch history
-and a successful complete exact-SHA push Verify run. It does not accept a PR run
+and a successful complete exact-SHA push Release Verify run. It does not accept a PR run
 or another commit's success. The preparation job packs that exact checkout and
 passes the immutable tarball to the separately OIDC-permitted publish job. If
 Publish fails after release creation, rerun Publish rather than bumping again or

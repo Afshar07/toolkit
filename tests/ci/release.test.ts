@@ -112,7 +112,7 @@ describe("release orchestration (injected commands only)", () => {
   });
 });
 
-describe("Verify polling", () => {
+describe("Release Verify polling", () => {
   const entry = (fields = {}) => ({ id: 42, run_attempt: 1, head_sha: sha, head_branch: "main", event: "push", status: "completed", conclusion: "success", html_url: "https://github.com/owner/toolkit/actions/runs/42", ...fields });
   function pollFixture(runs: object[]) {
     const calls: string[][] = [];
@@ -123,11 +123,12 @@ describe("Verify polling", () => {
     const f = pollFixture([entry()]);
     await expect(pollVerify(f)).resolves.toMatchObject({ id: 42 });
     expect(f.calls[0].join(" ")).toContain(`head_sha=${sha}&branch=main&event=push`);
+    expect(f.calls[0].join(" ")).toContain("actions/workflows/release-verify.yml/runs?");
     expect(f.calls[0]).toContain("--paginate");
   });
   it.each(["failure", "cancelled", "skipped"])("rejects latest %s attempt despite prior success, with diagnostics", async (conclusion) => {
     const f = pollFixture([entry(), entry({ run_attempt: 2, conclusion })]);
-    await expect(pollVerify(f)).rejects.toThrow(`Verify concluded ${conclusion}`);
+    await expect(pollVerify(f)).rejects.toThrow(`Release Verify concluded ${conclusion}`);
     await expect(pollVerify(f)).rejects.toThrow("gh run view 42 --attempt 2 --log --repo owner/toolkit");
   });
   it.each([[], [entry({ status: "in_progress" })], [entry({ head_sha: other })], [entry({ event: "pull_request" })], [entry({ head_branch: "feature" })]])("bounds missing or pending verification", async (...args) => {
@@ -139,5 +140,10 @@ describe("Verify polling", () => {
   it("propagates API network failures rather than treating them as missing runs", async () => {
     const f = pollFixture([]);
     await expect(pollVerify({ ...f, runner: async () => fail("network error") })).rejects.toThrow("network error");
+  });
+  it("cannot use ordinary Verify success when Release Verify is missing", async () => {
+    const f = pollFixture([]);
+    const runner = async (_command: string, args: string[]) => ok(JSON.stringify([{ workflow_runs: args.some((arg) => arg.includes("/workflows/verify.yml/")) ? [entry()] : [] }]));
+    await expect(pollVerify({ ...f, runner })).rejects.toThrow("Timed out waiting for Release Verify");
   });
 });

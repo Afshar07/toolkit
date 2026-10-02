@@ -46,13 +46,13 @@ export async function pollVerify({ runner, repository, branch, sha, timeoutMs = 
   const deadline = now() + timeoutMs;
   const query = new URLSearchParams({ head_sha: sha, branch, event: "push", per_page: "100" });
   while (true) {
-    const pages = JSON.parse(await run("gh", ["api", "--paginate", "--slurp", `repos/${repository}/actions/workflows/verify.yml/runs?${query}`]));
+    const pages = JSON.parse(await run("gh", ["api", "--paginate", "--slurp", `repos/${repository}/actions/workflows/release-verify.yml/runs?${query}`]));
     const latest = latestRelevantRun(pages.flatMap((page) => page.workflow_runs ?? []).filter((entry) => entry.head_branch === branch), sha);
     const state = evaluateRun(latest);
     if (state === "success") return latest;
     const diagnostic = latest ? `\n${latest.html_url}\nLogs: gh run view ${latest.id} --attempt ${latest.run_attempt} --log --repo ${repository}` : "";
-    if (state === "failed") throw new Error(`Verify concluded ${latest.conclusion} for ${sha}.${diagnostic}`);
-    if (now() >= deadline) throw new Error(`Timed out waiting for Verify for ${sha}.${diagnostic}`);
+    if (state === "failed") throw new Error(`Release Verify concluded ${latest.conclusion} for ${sha}.${diagnostic}`);
+    if (now() >= deadline) throw new Error(`Timed out waiting for Release Verify for ${sha}.${diagnostic}`);
     await sleep(Math.min(pollMs, Math.max(0, deadline - now())));
   }
 }

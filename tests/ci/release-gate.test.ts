@@ -1,5 +1,8 @@
-import { describe, expect, it } from "vitest";
-import { evaluateRun, latestRelevantRun } from "../../scripts/release-gate.mjs";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { evaluateRun, gate, latestRelevantRun } from "../../scripts/release-gate.mjs";
+
+vi.mock("node:child_process", () => ({ execFileSync: vi.fn(() => "a".repeat(40)) }));
+afterEach(() => vi.unstubAllGlobals());
 
 describe("release verification gate selection", () => {
   const sha = "a".repeat(40);
@@ -17,4 +20,21 @@ describe("release verification gate selection", () => {
     expect(run?.id).toBe(11);
   });
   it("classifies a missing run", () => expect(evaluateRun(undefined)).toBe("missing"));
+  it("queries only Release Verify with exact SHA, default branch, and push event", async () => {
+    const fetch = vi.fn(async (_url: string) => ({ ok: true, json: async () => ({ workflow_runs: [{ id: 1, run_attempt: 1, head_sha: sha, event: "push", status: "completed", conclusion: "success" }] }) }));
+    vi.stubGlobal("fetch", fetch);
+    await expect(gate({ repository: "owner/toolkit", tag: "v1.0.0", defaultBranch: "main", timeoutMs: 0 })).resolves.toBe(sha);
+    expect(fetch.mock.calls[0][0]).toBe(`https://api.github.com/repos/owner/toolkit/actions/workflows/release-verify.yml/runs?branch=main&event=push&head_sha=${sha}&per_page=100`);
+  });
+  it("cannot use ordinary Verify success when Release Verify is missing", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => ({ ok: true, json: async () => ({ workflow_runs: url.includes("/workflows/verify.yml/") ? [{ id: 1, run_attempt: 1, head_sha: sha, event: "push", status: "completed", conclusion: "success" }] : [] }) })));
+    await expect(gate({ repository: "owner/toolkit", tag: "v1.0.0", defaultBranch: "main", timeoutMs: 0 })).rejects.toThrow("No qualifying Release Verify run found");
+  });
+  it.each(["failure", "cancelled", "skipped"])("rejects latest Release Verify %s despite prior success", async (conclusion) => {
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, json: async () => ({ workflow_runs: [
+      { id: 1, run_attempt: 1, head_sha: sha, event: "push", status: "completed", conclusion: "success" },
+      { id: 1, run_attempt: 2, head_sha: sha, event: "push", status: "completed", conclusion },
+    ] }) })));
+    await expect(gate({ repository: "owner/toolkit", tag: "v1.0.0", defaultBranch: "main", timeoutMs: 0 })).rejects.toThrow(`Latest Release Verify run attempt for ${sha} concluded ${conclusion}`);
+  });
 });

@@ -29,12 +29,12 @@ export async function gate({ repository, tag, defaultBranch, timeoutMs = 15 * 60
   const deadline = Date.now() + timeoutMs;
   while (true) {
     const query = new URLSearchParams({ branch: defaultBranch, event: "push", head_sha: sha, per_page: "100" });
-    const data = await github(`/repos/${repository}/actions/workflows/verify.yml/runs?${query}`);
+    const data = await github(`/repos/${repository}/actions/workflows/release-verify.yml/runs?${query}`);
     const run = latestRelevantRun(data.workflow_runs ?? [], sha);
     const state = evaluateRun(run);
     if (state === "success") return sha;
-    if (state === "failed") throw new Error(`Latest Verify run attempt for ${sha} concluded ${run.conclusion}.`);
-    if (Date.now() >= deadline) throw new Error(state === "missing" ? `No qualifying Verify run found for ${sha}.` : `Timed out waiting for Verify run ${run.id} for ${sha}.`);
+    if (state === "failed") throw new Error(`Latest Release Verify run attempt for ${sha} concluded ${run.conclusion}.`);
+    if (Date.now() >= deadline) throw new Error(state === "missing" ? `No qualifying Release Verify run found for ${sha}.` : `Timed out waiting for Release Verify run ${run.id} for ${sha}.`);
     await new Promise((resolve) => setTimeout(resolve, pollMs));
   }
 }
