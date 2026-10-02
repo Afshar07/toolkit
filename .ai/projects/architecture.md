@@ -192,20 +192,27 @@ and retargets the copied author's origin. Registry initialization, Git environme
 line-ending modes, and project ownership remain per-test. After-each cleanup only
 removes fixture roots; each file registers after-all seed disposal, which waits for
 an active seed build to settle and removes its root even after failed setup.
+Both repository copies are drained with `Promise.allSettled` before propagating
+failure, so failed setup cannot race cleanup against an active Windows copy.
 `TOOLKIT_TEST_TIMINGS=1` enables per-file aggregate helper Git command counts and
 elapsed milliseconds plus publication setup/cleanup and seed build/copy/cleanup
-totals. Log command names
-only, never arguments, output, paths, or fixture contents. Production Git is not
+totals. Log command names only, never arguments, output, paths, or fixture contents. Production Git is not
 instrumented; setup, seed build/copy, and helper Git timings overlap rather than
 summing to wall-clock time. Seed cleanup is separate. Windows Release Verify opts
-in. The two-worker limit is a benchmark experiment, not a demonstrated speedup:
-baseline run `37037832998` had 141.5s Windows tests, 74.2s Windows publication,
-and 4.6s Ubuntu publication. Validate improvements on real Windows runners;
-Linux results are not evidence of Windows speedup. A subsequent Windows run took
-104.28s for tests, with approximately 46s of publication setup and 1.2s cleanup.
-Per-file seed reuse replaces repeated Git setup with filesystem copies; its Windows
-speedup remains unverified. Real filesystem/Git helper tests cover isolation,
-after-each seed retention, after-all disposal, and failed active seed setup.
+in. Keep the bounded two-worker configuration and per-file seed reuse: real
+Windows run `37044452590` passed all 27 files (238 tests passed, one
+platform-specific skip), with 91.75s of tests and a 2m14s job versus baseline
+run `37037832998` at 141.54s and 2m59s. The observed test-duration reduction
+is about 35%; hosted-runner timings vary, so this is not a performance guarantee.
+Publication setup totals fell from approximately 46s before seed reuse to 23s.
+Linux results alone are not evidence of Windows speedup. Real filesystem/Git
+helper tests cover isolation, after-each seed retention, after-all disposal,
+failed active seed setup, and draining failed copies before cleanup.
+
+Workflow contract tests normalize CRLF to LF before textual assertions and cover
+both checkout line-ending formats. The real-Git registry integration suite uses
+the same 30-second test budget as publication suites; retain assertions and avoid
+raising the global timeout to accommodate integration work.
 
 ## CI and releases
 
@@ -225,6 +232,9 @@ trigger. Do not require this path-filtered release workflow as a PR check.
 It also supports manual dispatch for performance benchmarks without a version
 bump; dispatch runs do not qualify for the push-only release gate.
 Routine Verify success alone cannot satisfy the npm release gate.
+Keep Release Verify and its manual trigger: it is the release safety gate, not
+a temporary benchmark workflow. Manual dispatch permits troubleshooting without
+a version bump or publication; it still cannot authorize a release.
 
 `npm run release` runs `scripts/release.mjs` from the source checkout. It defaults
 to a patch bump; `npm run release -- minor` and `-- major` select larger bumps.
