@@ -1,6 +1,6 @@
 {
   "name": "@afshar7/toolkit",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "Portable development workspace recipes",
   "type": "module",
   "bin": {
