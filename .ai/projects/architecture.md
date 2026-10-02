@@ -29,6 +29,11 @@ src/
 - Workspace names are portable single directory names, and HTTP(S) Git remotes are credential-free. Existing symlinks or junctions must not redirect recipe, agent, or context-backup writes outside their selected root; preflight all planned writes and use exclusive creation for new files.
 - Setup never overwrites an existing destination. Clone at most three repositories concurrently; continue other clones when one fails.
 - Tests mirror source concerns under `tests/` and use temporary Git repositories.
+- `src/scanner/scan.ts` drains all concurrent remote-reading Git processes with
+  `Promise.allSettled` before rejecting. Do not reintroduce early rejection while
+  sibling processes still run: Windows can retain directory locks and fail test
+  cleanup with `EBUSY`. `tests/scanner/scan-lifecycle.test.ts` covers both unsafe
+  URLs and Git failures while another remote read remains pending.
 
 ## Toolkit agent distribution
 
@@ -54,6 +59,20 @@ plus the canonical version through a disposable ordinary checkout. The machine
 registry remains a distribution cache and is refreshed only after a successful
 push, before the selected target's ownership is reconciled.
 
+`toolkit agents publish --all` selects validated upstream manifest membership and
+uses the same engine as single-agent publication. All selected local files and
+ownership baselines are preflighted before checkout writes or confirmation. One
+combined diff, confirmation, version bump, commit, and normal push publishes only
+changed definitions. Refresh happens once; all changed local files are rechecked
+before any reconciliation, then exact-byte per-file checks remain in place.
+Unchanged files and unrelated local state are preserved. Post-push failures report
+successful publication with incomplete (potentially partial) local synchronization.
+The CLI requires exactly one of `NAME` or `--all`; `--all` works with project and
+global targets, `--dry-run`, and `--yes`. `--include-override` and
+`--allow-unmanaged` acknowledge every selected agent's corresponding state, but
+never bypass a known stale baseline. The additive `publishAllAgents` API exposes
+batch previews/results; `publishAgent` retains its single-agent public contract.
+
 `src/agents/target.ts` selects project or global OpenCode paths. Existing string
 roots still mean project targets. `--global` is supported throughout the agent
 lifecycle and is mutually exclusive with an explicit destination, rejected before
@@ -75,9 +94,11 @@ publication recovery commands retain `--global`.
   initialization, refresh, paths, and Git safety.
 - `src/agents/registry.ts` validates and loads an `agents/` directory without
   knowing how it was acquired.
-- `src/agents/sync.ts` compares canonical definitions with project files and the
-  separate ownership manifest at `.toolkit/agents.json`.
-- `.opencode/agents/` is the current installation target. The canonical Toolkit
+- `src/agents/sync.ts` compares canonical definitions with the selected target's
+  files and separate ownership manifest. Project state lives at
+  `.toolkit/agents.json`; global state lives under the OpenCode config root.
+- `.opencode/agents/` is the default project installation target; global mode
+  selects `<OpenCode config>/agents/`. The canonical Toolkit
   agent registry is not an OpenCode-specific concept; do not couple definitions
   or Git distribution to this adapter/location.
 - The npm package includes `agents/` as a bootstrap/offline fallback. Normal
@@ -137,7 +158,8 @@ behavior. Project-specific files can coexist with managed files under
 ### Authoring and tests
 
 Canonical membership is changed in a normal Toolkit clone. Existing canonical
-definitions may also be published from a project with `toolkit agents publish`;
+definitions may also be published from a project or global target with
+`toolkit agents publish`;
 its deterministic `YYYY.MM.sequence` version supports multiple same-day
 publications. Never author changes in `~/.toolkit/registry`; another project or
 machine receives them with `toolkit agents update`.
@@ -149,12 +171,60 @@ configuration, or depend on the developer's working tree. Configure Git identity
 locally in each fixture. Keep path handling portable, avoid shell-only Git
 assumptions, and skip only genuinely platform-specific symlink cases on Windows.
 
+Installation tests compare filenames and exact installed text with the current
+canonical registry, not hardcoded prompt wording or a fixed agent count.
+Compiled CLI tests asserting help text explicitly set `CONSOLA_LEVEL=3` so the
+inherited test environment cannot suppress informational help output.
+
 `npm run verify` is the release-confidence gate: it builds TypeScript before
 running domain, real-Git, compiled-CLI, packed-artifact, and clean-consumer tests.
 CI runs this same command on Ubuntu and Windows; package tests must exercise only
 the supported public exports and assets present in the npm tarball.
 
-Normal CI verifies pull requests and default-branch pushes, not every feature
-branch push. Release publication consumes the exact tagged commit only after its
-complete default-branch push verification succeeds, then transfers the prepared
-tarball to the separately OIDC-permitted publishing job.
+## CI and releases
+
+`.github/workflows/verify.yml` verifies pull requests and pushes to `main`, not
+every feature-branch push. Both triggers ignore changes exclusively under
+`agents/**`; mixed changes still run the complete Ubuntu/Windows matrix. This
+skip does not weaken npm release gates. A skipped workflow can leave required
+branch-protection checks pending; repository settings must accommodate this
+separately. An agent-only commit without exact-SHA verification cannot qualify
+for npm publication.
+
+`npm run release` runs `scripts/release.mjs` from the source checkout. It defaults
+to a patch bump; `npm run release -- minor` and `-- major` select larger bumps.
+This is a mutating release command, not a verification command; never execute it
+as part of ordinary agent validation.
+
+- Require a clean worktree including untracked files, the GitHub default branch,
+  Git/npm/authenticated `gh`, consistent origin fetch/push repositories, and write
+  access. Pull fast-forward only; never reset, stash, force-push, or move tags.
+- Bump with lifecycle scripts disabled, commit only `package.json` and
+  `package-lock.json`, then normally push the default branch. Wait up to 15
+  minutes for the latest exact-SHA default-branch push Verify attempt to succeed
+  before creating an annotated tag at that SHA and a generated-notes GitHub
+  Release. Failed/cancelled/skipped Verify attempts stop with diagnostics.
+- `npm run release -- --resume` retries the current version and HEAD without
+  another bump. Refuse mismatching tags, changed resume HEAD, and draft releases;
+  matching existing tags/releases are accepted. Partial failures retain state
+  and print recovery instructions, not automatic rollback. If the bump was not
+  committed, inspect and finish that commit before resuming.
+- Release tests inject GitHub/npm commands and use temporary local Git remotes;
+  no test publishes to GitHub or npm. `tests/ci/release.integration.test.ts`
+  exercises version-commit push, failed-CI resume, and explicit-SHA tagging.
+
+`.github/workflows/publish.yml` remains the only npm publishing path, using OIDC.
+`scripts/release-gate.mjs` requires the tagged commit in default-branch history
+and a successful complete exact-SHA push Verify run. It does not accept a PR run
+or another commit's success. The preparation job packs that exact checkout and
+passes the immutable tarball to the separately OIDC-permitted publish job. If
+Publish fails after release creation, rerun Publish rather than bumping again or
+moving the tag. No local npm publishing credential is needed for the release
+script.
+
+## Deferred terminal diff UI
+
+Richer diff rendering was explored but deferred at the user's request. No
+OpenTUI, Pierre Diffs, Ink, jsdiff, or Delta integration was added. Keep the
+current plain diff presentation and Node.js >=20 runtime contract unless a new
+task explicitly revisits them; do not treat the exploration as pending work.

@@ -137,6 +137,18 @@ $EDITOR .opencode/agents/coder.md
 toolkit agents publish coder
 ```
 
+To publish all canonical agents together, use `toolkit agents publish --all`
+(or `--all --global` for global OpenCode definitions). Select exactly one of a
+name or `--all`. Membership comes from the upstream `agents/manifest.json`, not
+local filenames. Every selected file must exist and pass ownership and conflict
+checks before the combined diff and single confirmation. Only changed definitions
+are committed, with one version bump and normal push; unchanged files and
+unrelated local agents are not reconciled. `--include-override` and
+`--allow-unmanaged` apply to every selected agent without bypassing stale baselines.
+Before any local reconciliation, all changed files are rechecked for edits made
+during publication. A post-push failure may leave local synchronization partial;
+it does not roll back the remote publication.
+
 Publication writes to the actual Toolkit source repository's default branch; it
 never authors in `~/.toolkit/registry`. It requires Git read and direct-push
 access using the user's existing credentials, but no npm token or npm release.

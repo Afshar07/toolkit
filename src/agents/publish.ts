@@ -52,6 +52,19 @@ export interface IPublishGitIdentity {
   email: string;
 }
 
+export interface IPublishAllAgentsPreview extends Omit<IPublishAgentPreview, "agentPath"> {
+  agents: { name: string; agentPath: string; differs: boolean }[];
+}
+
+export interface IPublishAllAgentsResult extends Omit<IPublishAgentResult, "preview"> {
+  preview: IPublishAllAgentsPreview;
+}
+
+export interface IPublishAllAgentsOptions extends Omit<IPublishAgentOptions, "confirm" | "onPreview"> {
+  confirm?: (preview: IPublishAllAgentsPreview) => Promise<boolean>;
+  onPreview?: (preview: IPublishAllAgentsPreview) => void;
+}
+
 export class AgentPublishError extends Error {
   constructor(message: string, public readonly published = false) { super(message); }
 }
@@ -59,14 +72,31 @@ export class AgentPublishError extends Error {
 /** Publish exactly one existing canonical project agent through an isolated ordinary checkout. */
 export async function publishAgent(name: string, options: IPublishAgentOptions = {}): Promise<IPublishAgentResult> {
   assertAgentName(name);
+  const singlePreview = (preview: IPublishAllAgentsPreview): IPublishAgentPreview => {
+    const { agents, ...shared } = preview;
+    return { ...shared, agentPath: agents[0].agentPath };
+  };
+  const result = await publishSelectedAgents(name, {
+    ...options,
+    onPreview: (preview) => options.onPreview?.(singlePreview(preview)),
+    confirm: options.confirm ? (preview) => options.confirm!(singlePreview(preview)) : undefined,
+  });
+  return { ...result, preview: singlePreview(result.preview) };
+}
+
+/** Publish all upstream manifest members together, with one preflight, confirmation, and push. */
+export async function publishAllAgents(options: IPublishAllAgentsOptions = {}): Promise<IPublishAllAgentsResult> {
+  return publishSelectedAgents(undefined, options);
+}
+
+async function publishSelectedAgents(name: string | undefined, options: IPublishAllAgentsOptions): Promise<IPublishAllAgentsResult> {
   if (options.global && options.destination !== undefined) throw new AgentPublishError("--global and --destination are mutually exclusive.");
   if (options.target && (options.global || options.destination !== undefined)) throw new AgentPublishError("target cannot be combined with global or destination.");
   const projectRoot = options.target ?? (options.global ? resolveGlobalAgentTarget() : resolveAgentTarget(options.destination ?? process.cwd()));
   const scope = projectRoot.scope === "global" ? "global" : "project";
   const recovery = `toolkit agents update${scope === "global" ? " --global" : ""}`;
-  const agentPath = await safeProjectAgentPath(projectRoot, name);
-  const originalLocalContent = await readFile(agentPath, "utf8");
-  const canonicalLocalContent = normalizeCanonicalAgentContent(originalLocalContent);
+  const selectedPath = name === undefined ? undefined : await safeProjectAgentPath(projectRoot, name);
+  const selectedContent = selectedPath === undefined ? undefined : await readFile(selectedPath, "utf8");
   const ownership = await readAgentManifest(projectRoot);
   const paths = options.registryPaths ?? resolveToolkitRegistryPaths();
   const remote = options.remote ?? await configuredRemote(paths);
@@ -80,46 +110,56 @@ export async function publishAgent(name: string, options: IPublishAgentOptions =
     if (!branch) throw new AgentPublishError("The Toolkit remote default branch could not be determined.");
     const agentsPath = path.join(temporaryRoot, "agents");
     const upstream = await readCanonicalAgentRegistry(agentsPath, "local");
-    const fileName = `${name}.md`;
-    if (!Object.hasOwn(upstream.agents, fileName)) throw new AgentPublishError(`Unknown canonical agent: ${name}. Membership comes from agents/manifest.json.`);
-    const upstreamContent = upstream.agents[fileName];
-    const record = ownership.installed[name];
-    const overridden = ownership.overrides.includes(name);
-    if (overridden && !options.includeOverride) {
-      throw new AgentPublishError(`${name} is a ${scope} override. Re-run with --include-override to publish it and return it to Toolkit management.`);
+    if (name !== undefined && !Object.hasOwn(upstream.agents, `${name}.md`)) throw new AgentPublishError(`Unknown canonical agent: ${name}. Membership comes from agents/manifest.json.`);
+    const selected = [];
+    for (const fileName of name === undefined ? Object.keys(upstream.agents) : [`${name}.md`]) {
+      const agentName = fileName.slice(0, -3);
+      const agentPath = selectedPath ?? await safeProjectAgentPath(projectRoot, agentName);
+      const originalLocalContent = selectedContent ?? await readFile(agentPath, "utf8");
+      const canonicalLocalContent = normalizeCanonicalAgentContent(originalLocalContent);
+      const upstreamContent = upstream.agents[fileName];
+      const record = ownership.installed[agentName];
+      const overridden = ownership.overrides.includes(agentName);
+      if (overridden && !options.includeOverride) {
+        throw new AgentPublishError(`${agentName} is a ${scope} override. Re-run with --include-override to publish it and return it to Toolkit management.`);
+      }
+      if (!overridden && !record && !options.allowUnmanaged) {
+        throw new AgentPublishError(`${agentName} is unmanaged in this ${scope} target, so no trustworthy installed baseline exists. Re-run with --allow-unmanaged to acknowledge this.`);
+      }
+      if (record && !installedHashMatchesCanonical(record.hash, upstreamContent) && canonicalLocalContent !== upstreamContent) {
+        throw new AgentPublishError(`Publication conflict for ${agentName}: the shared definition changed since this ${scope} target installed it. Run \`${recovery}\`, reconcile the changes, then publish again.`);
+      }
+      selected.push({ name: agentName, fileName, agentPath, originalLocalContent, canonicalLocalContent, overridden, differs: canonicalLocalContent !== upstreamContent });
     }
-    if (!overridden && !record && !options.allowUnmanaged) {
-      throw new AgentPublishError(`${name} is unmanaged in this ${scope} target, so no trustworthy installed baseline exists. Re-run with --allow-unmanaged to acknowledge this.`);
-    }
-    if (record && !installedHashMatchesCanonical(record.hash, upstreamContent) && canonicalLocalContent !== upstreamContent) {
-      throw new AgentPublishError(`Publication conflict for ${name}: the shared definition changed since this ${scope} target installed it. Run \`${recovery}\`, reconcile the changes, then publish again.`);
-    }
+    const agents = selected.map(({ name, agentPath, differs }) => ({ name, agentPath, differs }));
+    const changed = selected.filter((agent) => agent.differs);
 
-    if (canonicalLocalContent === upstreamContent) {
-      const preview = { agentPath, repository: displayRemote, branch, differs: false, diff: "", currentVersion: upstream.version };
+    if (!changed.length) {
+      const preview = { agents, repository: displayRemote, branch, differs: false, diff: "", currentVersion: upstream.version };
       options.onPreview?.(preview);
       return { outcome: "unchanged", preview, localSynchronizationComplete: true };
     }
 
     const proposedVersion = incrementCanonicalVersion(upstream.version, options.now ?? new Date());
-    await writeFile(path.join(agentsPath, fileName), canonicalLocalContent, "utf8");
+    for (const agent of changed) await writeFile(path.join(agentsPath, agent.fileName), agent.canonicalLocalContent, "utf8");
     const manifestPath = path.join(agentsPath, "manifest.json");
     const manifest = JSON.parse(await readFile(manifestPath, "utf8")) as Record<string, unknown>;
     manifest.version = proposedVersion;
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
     await readCanonicalAgentRegistry(agentsPath, "local");
-    const diff = await runGit(["-C", temporaryRoot, "diff", "--", `agents/${fileName}`, "agents/manifest.json"], "Could not generate the publication diff", options.gitEnvironment);
-    const preview = { agentPath, repository: displayRemote, branch, differs: true, diff, currentVersion: upstream.version, proposedVersion };
+    const changedPaths = [...changed.map((agent) => `agents/${agent.fileName}`), "agents/manifest.json"];
+    const diff = await runGit(["-C", temporaryRoot, "diff", "--", ...changedPaths], "Could not generate the publication diff", options.gitEnvironment);
+    const preview = { agents, repository: displayRemote, branch, differs: true, diff, currentVersion: upstream.version, proposedVersion };
     options.onPreview?.(preview);
     if (options.dryRun) return { outcome: "dry-run", preview, localSynchronizationComplete: true };
     if (!options.confirm || !await options.confirm(preview)) throw new AgentPublishError("Publication cancelled; no remote or local state was changed.");
 
-    await runGit(["-C", temporaryRoot, "add", "--", `agents/${fileName}`, "agents/manifest.json"], "Could not stage the agent publication", options.gitEnvironment);
+    await runGit(["-C", temporaryRoot, "add", "--", ...changedPaths], "Could not stage the agent publication", options.gitEnvironment);
     if (options.gitIdentity) {
       await runGit(["-C", temporaryRoot, "config", "user.name", options.gitIdentity.name], "Could not configure temporary Git author name", options.gitEnvironment);
       await runGit(["-C", temporaryRoot, "config", "user.email", options.gitIdentity.email], "Could not configure temporary Git author email", options.gitEnvironment);
     }
-    await runGit(["-C", temporaryRoot, "commit", "-m", `publish ${name} agent (${proposedVersion})`], "Could not commit the agent publication. Configure Git user.name and user.email, then retry", options.gitEnvironment);
+    await runGit(["-C", temporaryRoot, "commit", "-m", name === undefined ? `publish agents (${proposedVersion})` : `publish ${name} agent (${proposedVersion})`], "Could not commit the agent publication. Configure Git user.name and user.email, then retry", options.gitEnvironment);
     const commit = (await runGit(["-C", temporaryRoot, "rev-parse", "HEAD"], "Could not identify the publication commit", options.gitEnvironment)).trim();
     await options.beforePush?.();
     try {
@@ -132,12 +172,18 @@ export async function publishAgent(name: string, options: IPublishAgentOptions =
     try {
       await options.beforeReconcile?.();
       const refreshed = await prepareAgentRegistryForUpdate(paths, { remote, gitEnvironment: options.gitEnvironment });
-      if (refreshed.registry.version !== proposedVersion || refreshed.registry.agents[fileName] !== canonicalLocalContent) {
+      if (refreshed.registry.version !== proposedVersion || changed.some((agent) => refreshed.registry.agents[agent.fileName] !== agent.canonicalLocalContent)) {
         throw new Error("the machine registry did not refresh to the published commit");
       }
-      await recordPublishedAgent(projectRoot, name, canonicalLocalContent, proposedVersion, {
-        removeOverride: overridden && options.includeOverride === true,
-        originalContent: originalLocalContent,
+      for (const agent of changed) {
+        const currentPath = await safeProjectAgentPath(projectRoot, agent.name);
+        if (hashAgentContent(await readFile(currentPath, "utf8")) !== hashAgentContent(agent.originalLocalContent)) {
+          throw new Error(`Agent path changed during update: ${currentPath}`);
+        }
+      }
+      for (const agent of changed) await recordPublishedAgent(projectRoot, agent.name, agent.canonicalLocalContent, proposedVersion, {
+        removeOverride: agent.overridden && options.includeOverride === true,
+        originalContent: agent.originalLocalContent,
       });
       return { outcome: "published", preview, commit, localSynchronizationComplete: true };
     } catch (error) {

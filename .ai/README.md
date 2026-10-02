@@ -8,7 +8,7 @@ step 7, then follow the route exactly in order.
 | File | Read when you're... |
 | --- | --- |
 | `ongoing/README.md` | continuing an in-progress task; read only the matching task document |
-| `projects/architecture.md` | changing source layout, module boundaries, CLI integration, context generation, setup, scanning, or doctor behavior |
+| `projects/architecture.md` | changing source layout, module boundaries, CLI integration, context generation, agent lifecycle, setup, scanning, doctor, CI, or releases |
 
 ## Rules
 
@@ -23,6 +23,10 @@ step 7, then follow the route exactly in order.
   `projects/architecture.md` → source.
 - Workspace manifest, scanning, setup, doctor, or CLI integration:
   `projects/architecture.md` → source.
+- Agent distribution, synchronization, or publication:
+  `projects/architecture.md` → source.
+- CI, release automation, or npm publication:
+  `projects/architecture.md` → `scripts/` and applicable workflows/tests.
 - Continuing in-progress work: `ongoing/README.md` → only the matching task
   document → source.
 - Other project work: source named by the task.

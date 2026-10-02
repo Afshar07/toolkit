@@ -3,7 +3,7 @@ import * as path from "pathe";
 import { defineCommand } from "citty";
 import * as prompts from "@clack/prompts";
 import type { ICanonicalAgentRegistry } from "../agents/registry.js";
-import { publishAgent, type IPublishAgentPreview } from "../agents/publish.js";
+import { publishAgent, publishAllAgents, type IPublishAgentPreview, type IPublishAllAgentsPreview } from "../agents/publish.js";
 import { inspectAgents, manageAgent, overrideAgent, updateAgents } from "../agents/sync.js";
 import { agentDirectory, resolveAgentTarget, resolveGlobalAgentTarget, type IAgentTarget } from "../agents/target.js";
 import { prepareAgentRegistryForUpdate, resolveOfflineAgentRegistry } from "../registry/registry.js";
@@ -80,9 +80,10 @@ export const agentsCommand = defineCommand({
       },
     }),
     publish: defineCommand({
-      meta: { name: "publish", description: "Publish one project agent to the Toolkit source repository" },
+      meta: { name: "publish", description: "Publish one agent or all upstream canonical agents together" },
       args: {
-        name: agentNameArg(),
+        name: { ...agentNameArg(), required: false },
+        all: { type: "boolean", description: "Publish all upstream manifest agents in one operation" },
         destination: destinationOption(),
         global: globalArg(),
         "dry-run": { type: "boolean", description: "Fetch and preview without committing, pushing, or changing local state" },
@@ -91,24 +92,27 @@ export const agentsCommand = defineCommand({
         "allow-unmanaged": { type: "boolean", description: "Explicitly publish a canonical-name file without an installed baseline" },
       },
       async run({ args, rawArgs }) {
+        if ((args.name !== undefined) === (args.all === true)) throw new Error("Select exactly one of NAME or --all.");
         const destination = resolveDestination(args.destination, args.global === true, rawArgs);
         const interactive = process.stdin.isTTY && process.stdout.isTTY;
-        const result = await publishAgent(String(args.name), {
+        const options = {
           target: destination,
           dryRun: args["dry-run"] === true,
           includeOverride: args["include-override"] === true,
           allowUnmanaged: args["allow-unmanaged"] === true,
-          onPreview: printPublishPreview,
           confirm: args.yes === true ? async () => true : !interactive ? async () => {
             throw new Error("Publishing requires confirmation. Re-run with --yes in a non-interactive environment.");
           } : async () => {
-            const confirmed = await prompts.confirm({ message: "Publish this agent to the Toolkit repository?", initialValue: false });
+            const confirmed = await prompts.confirm({ message: args.all === true ? "Publish these agents together to the Toolkit repository?" : "Publish this agent to the Toolkit repository?", initialValue: false });
             return !prompts.isCancel(confirmed) && confirmed === true;
           },
-        });
+        };
+        const result = args.all === true
+          ? await publishAllAgents({ ...options, onPreview: printPublishPreview })
+          : await publishAgent(String(args.name), { ...options, onPreview: printPublishPreview });
         if (result.outcome === "unchanged") console.log("Nothing to publish; the local definition already matches upstream.");
         else if (result.outcome === "dry-run") console.log("Dry run complete; no persistent state was changed.");
-        else console.log(`Published successfully (${result.commit?.slice(0, 8)}); the ${destination.scope} agent is Toolkit-managed.`);
+        else console.log(`Published successfully (${result.commit?.slice(0, 8)}); the published ${destination.scope} agent${args.all === true ? "s are" : " is"} Toolkit-managed.`);
       },
     }),
   },
@@ -189,9 +193,10 @@ function printUpdateResult(result: Awaited<ReturnType<typeof updateAgents>>): vo
   if (!result.installed.length && !result.updated.length && !result.restored.length && !result.conflicts.length) console.log("No agent updates were needed.");
 }
 
-function printPublishPreview(preview: IPublishAgentPreview): void {
+function printPublishPreview(preview: IPublishAgentPreview | IPublishAllAgentsPreview): void {
   console.log("Agent publication preview");
-  console.log(`Agent: ${preview.agentPath}`);
+  if ("agents" in preview) for (const agent of preview.agents) console.log(`Agent: ${agent.agentPath} (${agent.differs ? "changed" : "unchanged"})`);
+  else console.log(`Agent: ${preview.agentPath}`);
   console.log(`Target: ${preview.repository} (${preview.branch})`);
   console.log(`Local definition differs: ${preview.differs ? "yes" : "no"}`);
   if (preview.proposedVersion) console.log(`Canonical version: ${preview.currentVersion} → ${preview.proposedVersion}`);
