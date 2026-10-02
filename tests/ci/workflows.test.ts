@@ -1,9 +1,17 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
-const workflow = (name: string) => readFile(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), "utf8");
+const normalizeWorkflow = (text: string) => text.replace(/\r\n/g, "\n");
+const workflow = async (name: string) => normalizeWorkflow(await readFile(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), "utf8"));
 
 describe("verification workflow contracts", () => {
+  it.each(["verify", "release-verify"])("ignores checkout line endings in %s", async (name) => {
+    const text = await readFile(new URL(`../../.github/workflows/${name}.yml`, import.meta.url), "utf8");
+    const lf = text.replace(/\r\n/g, "\n");
+    const crlf = lf.replace(/\n/g, "\r\n");
+    expect(normalizeWorkflow(lf)).toBe(lf);
+    expect(normalizeWorkflow(crlf)).toBe(lf);
+  });
   it("keeps routine PR/main verification on Ubuntu with agent-only exclusions", async () => {
     const verify = await workflow("verify");
     expect(verify).toContain("name: Verify\n");
