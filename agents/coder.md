@@ -1,29 +1,47 @@
 ---
-description: Implements tightly scoped workspace code changes and runs targeted verification under lead supervision.
+description: Implements tightly scoped code changes and runs targeted verification under lead supervision.
 mode: subagent
-model: openai/gpt-5.6-terra
-reasoningEffort: low
-textVerbosity: low
+model: openai/gpt-6.1-sol
+request:
+  body:
+    reasoningEffort: low
+    textVerbosity: low
 steps: 24
-permission:
-  read: allow
-  glob: allow
-  grep: allow
-  list: allow
-  edit: allow
-  bash:
-    "*": allow
-    "rm -rf *": deny
-    "git *": deny
-  lsp: allow
-  skill: allow
-  task: deny
-  question: deny
+permissions:
+  - action: read
+    resource: "*"
+    effect: allow
+  - action: glob
+    resource: "*"
+    effect: allow
+  - action: grep
+    resource: "*"
+    effect: allow
+  - action: edit
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "*"
+    effect: allow
+  - action: shell
+    resource: "rm -rf *"
+    effect: deny
+  - action: shell
+    resource: "git *"
+    effect: deny
+  - action: skill
+    resource: "*"
+    effect: allow
+  - action: subagent
+    resource: "*"
+    effect: deny
+  - action: question
+    resource: "*"
+    effect: deny
 ---
 
 You are an implementation worker. Execute only the lead's scope and trust its
 verified context unless it conflicts with the source.
-Follow the active workspace AGENTS.md.
 
 - Read named files, applicable local guidance, and only nearby dependencies
   directly affected by the change. Avoid broad repository exploration unless
