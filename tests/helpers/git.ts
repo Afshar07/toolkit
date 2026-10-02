@@ -1,6 +1,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { execa } from "execa";
+import { execa, type Options } from "execa";
 import * as path from "pathe";
+import { timeTestOperation } from "./timings.js";
+
+/** Times Git using a fixed command label, never its arguments or output. */
+export async function gitCommand(command: string, args: string[], options?: Options) {
+  return timeTestOperation(`git ${command}`, async () => execa("git", args, options));
+}
 
 export interface GitRegistryFixture {
   remote: string;
@@ -10,8 +16,8 @@ export interface GitRegistryFixture {
 export async function createGitRegistryFixture(root: string, agents: Record<string, string>): Promise<GitRegistryFixture> {
   const remote = path.join(root, "remote.git");
   const author = path.join(root, "author");
-  await execa("git", ["init", "--bare", "--initial-branch=main", remote]);
-  await execa("git", ["init", "--initial-branch=main", author]);
+  await gitCommand("init", ["init", "--bare", "--initial-branch=main", remote]);
+  await gitCommand("init", ["init", "--initial-branch=main", author]);
   await git(author, ["config", "user.email", "toolkit-tests@example.test"]);
   await git(author, ["config", "user.name", "Toolkit Tests"]);
   await git(author, ["remote", "add", "origin", remote]);
@@ -30,7 +36,7 @@ export async function publishAgents(author: string, agents: Record<string, strin
 }
 
 export async function git(repository: string, args: string[]): Promise<void> {
-  await execa("git", ["-C", repository, ...args]);
+  await gitCommand(args[0]!, ["-C", repository, ...args]);
 }
 
 export function normalizeLineEndings(value: string): string {

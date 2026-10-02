@@ -6,6 +6,7 @@ on:
     paths:
       - 'package.json'
       - 'package-lock.json'
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -31,3 +32,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+        if: runner.os != 'Windows'
+      - run: npm run build
+        if: runner.os == 'Windows'
+      - run: npm test -- --maxWorkers=2 --minWorkers=2
+        if: runner.os == 'Windows'
+        env:
+          TOOLKIT_TEST_TIMINGS: '1'

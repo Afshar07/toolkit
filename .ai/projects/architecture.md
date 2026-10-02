@@ -178,8 +178,21 @@ inherited test environment cannot suppress informational help output.
 
 `npm run verify` is the release-confidence gate: it builds TypeScript before
 running domain, real-Git, compiled-CLI, packed-artifact, and clean-consumer tests.
-Release CI runs this same command on Ubuntu and Windows; package tests must exercise only
+Release CI runs this command on Ubuntu. Windows runs the equivalent build followed
+by `npm test -- --maxWorkers=2 --minWorkers=2`; package tests must exercise only
 the supported public exports and assets present in the npm tarball.
+
+Publication integration coverage has three sequential eight-test files (batch,
+global/line endings, single/conflicts), each owning its fixture cleanup through
+`tests/helpers/publication.ts`; never share a global directory array across files.
+`TOOLKIT_TEST_TIMINGS=1` enables per-file aggregate helper Git command counts and
+elapsed milliseconds plus publication setup/cleanup totals. Log command names
+only, never arguments, output, paths, or fixture contents. Production Git is not
+instrumented; setup and helper Git timings overlap. Windows Release Verify opts
+in. The two-worker limit is a benchmark experiment, not a demonstrated speedup:
+baseline run `37037832998` had 141.5s Windows tests, 74.2s Windows publication,
+and 4.6s Ubuntu publication. Validate improvements on real Windows runners;
+Linux results are not evidence of Windows speedup. Seed fixture reuse is deferred.
 
 ## CI and releases
 
@@ -194,8 +207,10 @@ for npm publication.
 `.github/workflows/release-verify.yml` (Release Verify) runs the complete
 Ubuntu/Windows matrix only on pushes to `main` changing `package.json` or
 `package-lock.json`, covering version bumps and dependency changes. It runs
-`npm ci` and `npm run verify`, never cancels in-progress runs, and has no PR
+`npm ci` and the full build/test gate described above, never cancels in-progress runs, and has no PR
 trigger. Do not require this path-filtered release workflow as a PR check.
+It also supports manual dispatch for performance benchmarks without a version
+bump; dispatch runs do not qualify for the push-only release gate.
 Routine Verify success alone cannot satisfy the npm release gate.
 
 `npm run release` runs `scripts/release.mjs` from the source checkout. It defaults

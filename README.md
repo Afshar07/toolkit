@@ -261,6 +261,25 @@ actual npm artifact, installs it into a temporary consumer, and verifies both th
 public API and bundled-agent fallback. Automated tests use temporary local bare
 remotes and never depend on GitHub or the user's Toolkit home.
 
+Publication coverage is split into three sequential eight-test files with separate
+fixture cleanup. Release Verify keeps `npm run verify` on Ubuntu; Windows runs
+`npm run build` followed by `npm test -- --maxWorkers=2 --minWorkers=2`, preserving
+the complete gate while allowing two files to run concurrently. This is a bounded
+performance experiment, not a validated Windows speedup: baseline run
+`37037832998` took 141.5s for Windows tests (74.2s for publication), versus 4.6s
+for Ubuntu publication. Compare subsequent Windows runs before tuning further;
+Linux timings do not establish a Windows improvement. Fixture reuse is deferred.
+Once these changes are pushed, manually run Release Verify from GitHub Actions
+to benchmark them without bumping a version. Manual runs do not qualify for the
+release gate, which still requires an exact-commit push run.
+
+Set `TOOLKIT_TEST_TIMINGS=1` to print test-only, per-file aggregate counts and
+elapsed milliseconds for helper Git commands and publication fixture setup and
+cleanup (enabled in Release Verify's Windows test step). No arguments, output,
+paths, or fixture contents are logged. Production Git operations are not
+instrumented; setup totals include their time, and aggregate durations overlap
+with the measured helper commands rather than summing to wall-clock time.
+
 GitHub Actions runs `Verify` on Ubuntu for pull requests and pushes to `main`, except when all changed files are under `agents/`. Mixed changes still run Ubuntu verification. Feature-branch pushes do not start a duplicate push run, and superseded pull-request verification is cancelled. If branch protection requires Verify checks, path-filtered pull requests can remain blocked with pending checks; configure those rules to accommodate agent-only updates.
 
 `Release Verify` (`.github/workflows/release-verify.yml`) runs the full Ubuntu/Windows matrix on pushes to `main` that change `package.json` or `package-lock.json`, including version bumps and dependency changes. It never cancels in-progress runs and does not run on pull requests; do not require it as a PR check. Releases require this successful complete workflow for the exact tagged commit's default-branch push. Ordinary `Verify` success alone, or an agent-only commit without Release Verify, cannot qualify for npm publication.
