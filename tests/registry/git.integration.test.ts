@@ -11,7 +11,8 @@ import { createGitRegistryFixture, normalizeLineEndings, publishAgents } from ".
 const temporaryDirectories: string[] = [];
 afterEach(async () => Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))));
 
-describe("Git-backed agent distribution", () => {
+// Several real Git pushes and registry refreshes can exceed five seconds on Windows.
+describe("Git-backed agent distribution", { timeout: 30_000 }, () => {
   it("refreshes one machine registry and safely synchronizes multiple projects", async () => {
     const root = await temporaryDirectory();
     const fixture = await createGitRegistryFixture(root, { lead: "lead v1\n", coder: "coder v1\n" });
