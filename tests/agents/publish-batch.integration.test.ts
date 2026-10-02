@@ -1,7 +1,7 @@
 import { readFile, readdir, rm, writeFile } from "node:fs/promises";
 import * as path from "pathe";
 import { execa } from "execa";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { publishAllAgents } from "../../src/agents/publish.js";
 import { readAgentManifest } from "../../src/agents/manifest.js";
 import { hashAgentContent, overrideAgent, updateAgents } from "../../src/agents/sync.js";
@@ -9,8 +9,9 @@ import { prepareAgentRegistryForUpdate } from "../../src/registry/registry.js";
 import { gitCommand, publishAgents } from "../helpers/git.js";
 import { agentPath, createPublicationFixtures, publishOptions, remoteHead } from "../helpers/publication.js";
 
-const { fixture, cleanup } = createPublicationFixtures();
+const { fixture, cleanup, dispose } = createPublicationFixtures();
 afterEach(cleanup);
+afterAll(dispose);
 
 /** Real Git operations need more than the default five seconds on Windows. */
 describe.sequential("agent batch publication", { timeout: 30_000 }, () => {

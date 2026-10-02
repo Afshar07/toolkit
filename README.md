@@ -262,23 +262,33 @@ public API and bundled-agent fallback. Automated tests use temporary local bare
 remotes and never depend on GitHub or the user's Toolkit home.
 
 Publication coverage is split into three sequential eight-test files with separate
-fixture cleanup. Release Verify keeps `npm run verify` on Ubuntu; Windows runs
+fixture cleanup. Each file lazily builds one immutable author/bare-remote seed;
+each test recursively copies both repositories (no shared links or object stores)
+and retargets its author's origin. Registry initialization, Git environment, and
+project ownership remain per-test. After-each cleanup removes only test fixtures;
+after-all disposal waits for seed setup and removes the separate seed root, even
+after setup failure. Focused lifecycle tests cover copy isolation and disposal.
+Release Verify keeps `npm run verify` on Ubuntu; Windows runs
 `npm run build` followed by `npm test -- --maxWorkers=2 --minWorkers=2`, preserving
 the complete gate while allowing two files to run concurrently. This is a bounded
 performance experiment, not a validated Windows speedup: baseline run
 `37037832998` took 141.5s for Windows tests (74.2s for publication), versus 4.6s
 for Ubuntu publication. Compare subsequent Windows runs before tuning further;
-Linux timings do not establish a Windows improvement. Fixture reuse is deferred.
+Linux timings do not establish a Windows improvement. A subsequent Windows run
+took 104.28s for tests, with approximately 46s of publication setup and 1.2s of
+cleanup. Seed reuse trades repeated Git initialization/commits for filesystem
+copies; its Windows speedup remains unverified.
 Once these changes are pushed, manually run Release Verify from GitHub Actions
 to benchmark them without bumping a version. Manual runs do not qualify for the
 release gate, which still requires an exact-commit push run.
 
 Set `TOOLKIT_TEST_TIMINGS=1` to print test-only, per-file aggregate counts and
-elapsed milliseconds for helper Git commands and publication fixture setup and
-cleanup (enabled in Release Verify's Windows test step). No arguments, output,
+elapsed milliseconds for helper Git commands, publication fixture setup/cleanup,
+and seed build/copy/cleanup (enabled in Release Verify's Windows test step). No arguments, output,
 paths, or fixture contents are logged. Production Git operations are not
 instrumented; setup totals include their time, and aggregate durations overlap
-with the measured helper commands rather than summing to wall-clock time.
+with seed build/copy and the measured helper commands rather than summing to
+wall-clock time. Seed disposal is separate from after-each cleanup.
 
 GitHub Actions runs `Verify` on Ubuntu for pull requests and pushes to `main`, except when all changed files are under `agents/`. Mixed changes still run Ubuntu verification. Feature-branch pushes do not start a duplicate push run, and superseded pull-request verification is cancelled. If branch protection requires Verify checks, path-filtered pull requests can remain blocked with pending checks; configure those rules to accommodate agent-only updates.
 

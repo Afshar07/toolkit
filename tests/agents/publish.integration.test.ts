@@ -1,6 +1,6 @@
 import { mkdir, readFile, readdir, symlink, writeFile } from "node:fs/promises";
 import * as path from "pathe";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { incrementCanonicalVersion, publishAgent } from "../../src/agents/publish.js";
 import { readAgentManifest } from "../../src/agents/manifest.js";
 import { hashAgentContent, overrideAgent } from "../../src/agents/sync.js";
@@ -8,8 +8,9 @@ import { readLocalAgentRegistry } from "../../src/registry/registry.js";
 import { publishAgents } from "../helpers/git.js";
 import { agentPath, createPublicationFixtures, publishOptions, remoteHead } from "../helpers/publication.js";
 
-const { fixture, cleanup } = createPublicationFixtures();
+const { fixture, cleanup, dispose } = createPublicationFixtures();
 afterEach(cleanup);
+afterAll(dispose);
 
 /** Real Git operations need more than the default five seconds on Windows. */
 describe.sequential("agent single publication and conflicts", { timeout: 30_000 }, () => {

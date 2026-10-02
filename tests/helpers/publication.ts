@@ -1,10 +1,10 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import * as path from "pathe";
 import { updateAgents } from "../../src/agents/sync.js";
 import { initializeToolkitRegistry, readLocalAgentRegistry } from "../../src/registry/registry.js";
 import { resolveToolkitRegistryPaths } from "../../src/registry/path.js";
-import { createGitRegistryFixture, gitCommand } from "./git.js";
+import { createGitRegistryFixture, gitCommand, type GitRegistryFixture } from "./git.js";
 import { timeTestOperation } from "./timings.js";
 
 interface IFixture {
@@ -22,6 +22,12 @@ interface IFixture {
 /** Each test file owns its fixture lifecycle, including cleanup of failed setup. */
 export function createPublicationFixtures() {
   const temporaryDirectories: string[] = [];
+  let seedRoot: string | undefined;
+  let seedPromise: Promise<GitRegistryFixture> | undefined;
+  const seed = () => seedPromise ??= timeTestOperation("publication seed build", async () => {
+    seedRoot = await mkdtemp(path.join(os.tmpdir(), "toolkit-publish-seed-"));
+    return createGitRegistryFixture(seedRoot, { lead: "lead v1\n", coder: "coder v1\n" });
+  });
   return {
     fixture: (inheritedAutoCrlf = false, legacyRegistry = false, forceAutoCrlf = false): Promise<IFixture> =>
       timeTestOperation("publication setup", async () => {
@@ -34,7 +40,14 @@ export function createPublicationFixtures() {
           GIT_CONFIG_NOSYSTEM: "1",
           ...(forceAutoCrlf ? { GIT_CONFIG_COUNT: "1", GIT_CONFIG_KEY_0: "core.autocrlf", GIT_CONFIG_VALUE_0: "true" } : {}),
         };
-        const source = await createGitRegistryFixture(root, { lead: "lead v1\n", coder: "coder v1\n" });
+        const original = await seed();
+        const source = { remote: path.join(root, "remote.git"), author: path.join(root, "author") };
+        await timeTestOperation("publication seed copy", async () => {
+          /** Drain both copies before failed setup can trigger fixture cleanup. */
+          const copies = await Promise.allSettled([cp(original.remote, source.remote, { recursive: true }), cp(original.author, source.author, { recursive: true })]);
+          for (const copy of copies) if (copy.status === "rejected") throw copy.reason;
+          await gitCommand("remote", ["-C", source.author, "remote", "set-url", "origin", source.remote]);
+        });
         const paths = resolveToolkitRegistryPaths(path.join(root, "home"));
         if (legacyRegistry) await createLegacyRegistry(paths.root, source.remote, gitEnvironment);
         const registry = legacyRegistry
@@ -48,6 +61,11 @@ export function createPublicationFixtures() {
       }),
     cleanup: () => timeTestOperation("publication cleanup", async () => {
       await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })));
+    }),
+    dispose: () => timeTestOperation("publication seed cleanup", async () => {
+      /** A failed seed build still owns a temporary root; wait before removing it. */
+      await seedPromise?.catch(() => undefined);
+      if (seedRoot) await rm(seedRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
     }),
   };
 }

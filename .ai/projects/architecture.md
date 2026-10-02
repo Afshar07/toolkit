@@ -185,14 +185,27 @@ the supported public exports and assets present in the npm tarball.
 Publication integration coverage has three sequential eight-test files (batch,
 global/line endings, single/conflicts), each owning its fixture cleanup through
 `tests/helpers/publication.ts`; never share a global directory array across files.
+Each helper instance lazily caches one seed-build promise for an immutable author
+checkout and bare remote in a separate temporary root. Each test recursively
+copies both repositories with `fs.cp` (no hard links, alternates, or shared symlinks)
+and retargets the copied author's origin. Registry initialization, Git environment,
+line-ending modes, and project ownership remain per-test. After-each cleanup only
+removes fixture roots; each file registers after-all seed disposal, which waits for
+an active seed build to settle and removes its root even after failed setup.
 `TOOLKIT_TEST_TIMINGS=1` enables per-file aggregate helper Git command counts and
-elapsed milliseconds plus publication setup/cleanup totals. Log command names
+elapsed milliseconds plus publication setup/cleanup and seed build/copy/cleanup
+totals. Log command names
 only, never arguments, output, paths, or fixture contents. Production Git is not
-instrumented; setup and helper Git timings overlap. Windows Release Verify opts
+instrumented; setup, seed build/copy, and helper Git timings overlap rather than
+summing to wall-clock time. Seed cleanup is separate. Windows Release Verify opts
 in. The two-worker limit is a benchmark experiment, not a demonstrated speedup:
 baseline run `37037832998` had 141.5s Windows tests, 74.2s Windows publication,
 and 4.6s Ubuntu publication. Validate improvements on real Windows runners;
-Linux results are not evidence of Windows speedup. Seed fixture reuse is deferred.
+Linux results are not evidence of Windows speedup. A subsequent Windows run took
+104.28s for tests, with approximately 46s of publication setup and 1.2s cleanup.
+Per-file seed reuse replaces repeated Git setup with filesystem copies; its Windows
+speedup remains unverified. Real filesystem/Git helper tests cover isolation,
+after-each seed retention, after-all disposal, and failed active seed setup.
 
 ## CI and releases
 
