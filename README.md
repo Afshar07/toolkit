@@ -52,7 +52,22 @@ For new workspaces in scripts, supply the destination and all context flags with
 
 `context validate` checks that the Markdown context entry point and referenced structure are present without changing files. `context agents` creates the currently bundled personal OpenCode agent files in either the workspace or global OpenCode agents directory, also without overwriting existing files.
 
-The generated structure includes shared workspace guidance under `.ai/`, project guidance under `.ai/projects/`, project-local indexes, and an indexed `ongoing/` directory for each active project. Project and ongoing-task routes are intentionally maintained in Markdown; Toolkit does not infer or rewrite them after initialization.
+The generated structure includes shared workspace guidance under `.ai/`, project guidance under `.ai/projects/`, project-local indexes, an indexed `ongoing/` directory for each active project, and a shared `technical-debt/` directory. Project, ongoing-task, and technical-debt records are intentionally maintained in Markdown; Toolkit does not infer or rewrite them after initialization.
+
+### Technical debt
+
+`technical-debt/README.md` indexes unresolved engineering debt across the workspace.
+Copy `technical-debt/TEMPLATE.md` to a descriptive filename and add it to the
+index. Record the problem, dated evidence and affected scope, impact, migration
+constraints, completion criteria, and verification. Keep project-specific debt
+scoped inside its record; do not duplicate the index in every project.
+
+Debt is deferred work, not cross-session task state or an instruction to start a
+migration. Use project-local `ongoing/` for active work, and read only debt records
+relevant to the current task. Update the record and index when debt is resolved
+or its disposition changes. The scaffold follows a custom shared context path
+when one is selected, and existing records retain the normal preservation and
+explicit-replacement protections.
 
 ## Canonical agents
 

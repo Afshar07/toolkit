@@ -24,6 +24,12 @@ src/
   `toolkit context agents`. Generated routes remain manually maintained
   Markdown; sync updates only unmodified Toolkit-managed files unless replacement
   is explicitly approved.
+- The context plan includes one shared `technical-debt/README.md` index and
+  `technical-debt/TEMPLATE.md` under the selected context path, not a copy per
+  project. Debt records are scoped, manually maintained Markdown; they are
+  distinct from project-local ongoing task state and do not authorize work.
+  Preserve edited indexes and user-authored records through the existing
+  ownership and explicit-replacement boundaries.
 - Manifests are declarative recipes: an optional explicit root repository or relative repository paths, named remotes with an explicit clone selection, and empty normal directories. Never copy source, generated files, credentials, or `.git` data.
 - Use `pathe` for portable path normalization. Validate manifest paths before setup so they cannot escape the workspace root.
 - Workspace names are portable single directory names, and HTTP(S) Git remotes are credential-free. Existing symlinks or junctions must not redirect recipe, agent, or context-backup writes outside their selected root; preflight all planned writes and use exclusive creation for new files.

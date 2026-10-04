@@ -1,6 +1,6 @@
 import type { AiContextOptions } from "./model.js";
 import { AiContextSetupError, normalizeAiContextOptions } from "./model.js";
-import { contextMaintenanceMarkdown, delegationMarkdown, engineeringMarkdown, localProjectReadmeMarkdown, ongoingReadmeMarkdown, projectGuidanceMarkdown, readmeMarkdown, rootAgentsMarkdown, workspaceMarkdown } from "./templates.js";
+import { contextMaintenanceMarkdown, delegationMarkdown, engineeringMarkdown, localProjectReadmeMarkdown, ongoingReadmeMarkdown, projectGuidanceMarkdown, readmeMarkdown, rootAgentsMarkdown, technicalDebtReadmeMarkdown, technicalDebtTemplateMarkdown, workspaceMarkdown } from "./templates.js";
 import { projectLocalIndexPath, projectOngoingIndexPath } from "./path.js";
 
 export interface ContextPlanFile { relativePath: string; content: string }
@@ -15,6 +15,8 @@ export function createAiContextPlan(input: AiContextOptions): ContextPlanFile[] 
     { relativePath: `${contextPath}/engineering-conventions.md`, content: engineeringMarkdown() },
     { relativePath: `${contextPath}/policies/delegation.md`, content: delegationMarkdown() },
     { relativePath: `${contextPath}/policies/context-maintenance.md`, content: contextMaintenanceMarkdown() },
+    { relativePath: `${contextPath}/technical-debt/README.md`, content: technicalDebtReadmeMarkdown() },
+    { relativePath: `${contextPath}/technical-debt/TEMPLATE.md`, content: technicalDebtTemplateMarkdown() },
   ];
   for (const project of options.projects) {
     files.push({ relativePath: `${contextPath}/projects/${project.id}.md`, content: projectGuidanceMarkdown(project) });

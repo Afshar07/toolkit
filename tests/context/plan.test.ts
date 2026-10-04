@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAiContextPlan } from "../../src/context/plan.js";
+import { technicalDebtReadmeMarkdown, technicalDebtTemplateMarkdown } from "../../src/context/templates.js";
 
 describe("createAiContextPlan", () => {
   it("renders active routing, held-project boundaries, and indexed ongoing state", () => {
@@ -14,9 +15,19 @@ describe("createAiContextPlan", () => {
     const paths = files.map((file) => file.relativePath);
     expect(paths.every((value) => !value.endsWith(".json"))).toBe(true);
     expect(paths).toContain("apps/web/.ai/ongoing/README.md");
+    expect(paths.filter((value) => value === ".ai/technical-debt/README.md")).toHaveLength(1);
+    expect(paths.filter((value) => value === ".ai/technical-debt/TEMPLATE.md")).toHaveLength(1);
+    expect(paths.some((value) => value.startsWith("apps/web/.ai/technical-debt/") || value.startsWith("apps/legacy/.ai/technical-debt/"))).toBe(false);
     expect(paths.some((value) => value.includes("history"))).toBe(false);
     expect(files.find((file) => file.relativePath === ".ai/README.md")?.content).toContain("| web |");
     expect(files.find((file) => file.relativePath === ".ai/README.md")?.content).toContain("legacy");
+    expect(files.find((file) => file.relativePath === ".ai/README.md")?.content).toContain("`technical-debt/README.md` indexes unresolved technical debt");
+    expect(files.find((file) => file.relativePath === ".ai/technical-debt/README.md")?.content).toBe(technicalDebtReadmeMarkdown());
+    expect(files.find((file) => file.relativePath === ".ai/technical-debt/TEMPLATE.md")?.content).toBe(technicalDebtTemplateMarkdown());
+    const maintenance = files.find((file) => file.relativePath === ".ai/policies/context-maintenance.md")?.content ?? "";
+    expect(maintenance).toContain("separately from ongoing task state");
+    expect(maintenance).toContain("Refresh dated evidence before implementation");
+    expect(maintenance).toContain("update its index disposition");
     expect(paths).toContain("apps/web/.ai/README.md");
     expect(paths).not.toContain("apps/legacy/.ai/README.md");
     expect(paths).not.toContain("apps/legacy/.ai/ongoing/README.md");
@@ -58,6 +69,8 @@ describe("createAiContextPlan", () => {
     const paths = files.map((file) => file.relativePath);
     expect(paths.filter((value) => value === ".ai/README.md")).toHaveLength(1);
     expect(paths).toContain(".ai/ongoing/README.md");
+    expect(paths).toContain(".ai/technical-debt/README.md");
+    expect(paths).toContain(".ai/technical-debt/TEMPLATE.md");
     const readme = files.find((file) => file.relativePath === ".ai/README.md")?.content ?? "";
     expect(readme).toContain("# .ai/ - Project Context for AI Agents");
     expect(readme).toContain("At workspace-router step 3");
@@ -66,6 +79,7 @@ describe("createAiContextPlan", () => {
     expect(readme).toContain("## Rules");
     expect(readme).toContain("## Task routes");
     expect(readme).toContain("`ongoing/README.md`");
+    expect(readme).toContain("| `technical-debt/README.md` | locating unresolved technical debt relevant to the current work");
     expect(readme).toContain("Route format:");
     expect(readme).toContain("When no route applies, inspect the requested source file directly.");
   });
@@ -99,7 +113,11 @@ describe("createAiContextPlan", () => {
 
     expect(agents).toContain("| root | `.` | `shared/context/README.md` | `shared/context/projects/root.md` |");
     expect(files.map((file) => file.relativePath)).toContain("shared/context/ongoing/README.md");
+    expect(files.map((file) => file.relativePath)).toContain("shared/context/technical-debt/README.md");
+    expect(files.map((file) => file.relativePath)).toContain("shared/context/technical-debt/TEMPLATE.md");
+    expect(files.find((file) => file.relativePath === "shared/context/README.md")?.content).toContain("# shared/context/ - Project Context");
     expect(files.find((file) => file.relativePath === "shared/context/README.md")?.content).not.toContain("Each project's `.ai/README.md`");
+    expect(files.filter((file) => file.relativePath.startsWith("shared/context/technical-debt/")).every((file) => !file.content.includes(".ai/"))).toBe(true);
   });
 
 });

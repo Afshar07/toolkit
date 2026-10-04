@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { AiContextSetupError, defaultAiContextOptions, setupAiContext } from "../../src/context/setup.js";
 import { OpenCodeAgentSetupError, setupOpenCodeAgents } from "../../src/agents/setup.js";
 import { canonicalAgents } from "../../src/agents/registry.js";
+import { technicalDebtReadmeMarkdown, technicalDebtTemplateMarkdown } from "../../src/context/templates.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -22,13 +23,16 @@ describe("setupAiContext", () => {
       projects: [{ id: "toolkit", path: ".", scope: "The command-line application." }],
     };
 
-    await expect(setupAiContext(directory, options)).resolves.toHaveLength(8);
+    await expect(setupAiContext(directory, options)).resolves.toHaveLength(10);
     await expect(access(path.join(directory, "AGENTS.md"))).resolves.toBeUndefined();
     await expect(access(path.join(directory, ".ai", "projects", "toolkit.md"))).resolves.toBeUndefined();
     await expect(access(path.join(directory, ".ai", "policies", "delegation.md"))).resolves.toBeUndefined();
     await expect(access(path.join(directory, ".ai", "ongoing", "README.md"))).resolves.toBeUndefined();
     await expect(readdir(path.join(directory, ".ai", "ongoing"))).resolves.toEqual(["README.md"]);
     await expect(readdir(path.join(directory, ".ai"))).resolves.not.toContain("history");
+    await expect(readdir(path.join(directory, ".ai", "technical-debt"))).resolves.toEqual(["README.md", "TEMPLATE.md"]);
+    await expect(readFile(path.join(directory, ".ai", "technical-debt", "README.md"), "utf8")).resolves.toContain(technicalDebtReadmeMarkdown());
+    await expect(readFile(path.join(directory, ".ai", "technical-debt", "TEMPLATE.md"), "utf8")).resolves.toContain(technicalDebtTemplateMarkdown());
     await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toMatch(/^<!-- toolkit:sha256=[a-f0-9]{64} -->\n/);
     await expect(readFile(path.join(directory, "AGENTS.md"), "utf8")).resolves.toContain("Markdown context is authoritative");
   });
@@ -85,6 +89,8 @@ describe("setupAiContext", () => {
       "shared/.ai/engineering-conventions.md",
       "shared/.ai/policies/delegation.md",
       "shared/.ai/policies/context-maintenance.md",
+      "shared/.ai/technical-debt/README.md",
+      "shared/.ai/technical-debt/TEMPLATE.md",
       "shared/.ai/projects/one.md",
       "projects/one/.ai/README.md",
       "projects/one/.ai/ongoing/README.md",
@@ -92,6 +98,9 @@ describe("setupAiContext", () => {
       "projects/two/.ai/README.md",
       "projects/two/.ai/ongoing/README.md",
     ]);
+    await expect(readdir(path.join(directory, "shared/.ai/technical-debt"))).resolves.toEqual(["README.md", "TEMPLATE.md"]);
+    await expect(access(path.join(directory, "projects/one/.ai/technical-debt"))).rejects.toThrow();
+    await expect(access(path.join(directory, "projects/two/.ai/technical-debt"))).rejects.toThrow();
   });
 
   it("preflights project-local conflicts without partial writes", async () => {

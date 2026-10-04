@@ -51,7 +51,8 @@ export function readmeMarkdown(options: AiContextOptions): string {
   const active = options.projects.filter((project) => project.status !== "held");
   const held = options.projects.filter((project) => project.status === "held");
   const rootProject = active.find((project) => project.path === ".");
-  if (rootProject) return `# .ai/ - Project Context for AI Agents
+  const contextPath = options.contextPath ?? ".ai";
+  if (rootProject) return `# ${contextPath}/ - Project Context for AI Agents
 
 At workspace-router step 3, select one route below; defer its documents until
 step 7, then follow the route exactly in order.
@@ -61,6 +62,7 @@ step 7, then follow the route exactly in order.
 | File | Read when you're... |
 | --- | --- |
 | \`ongoing/README.md\` | continuing an in-progress task; read only the matching task document |
+| \`technical-debt/README.md\` | locating unresolved technical debt relevant to the current work; read only the matching record |
 | <!-- example.md --> | <!-- working on a focused project concern --> |
 
 ## Rules
@@ -86,6 +88,7 @@ Markdown files in this directory are authoritative. Read \`workspace.md\` before
 - \`projects/\` defines shared ownership for each project.
 - \`policies/\` defines reusable conditional rules.
 - \`domains/\`, when present, defines cross-project contracts.
+- \`technical-debt/README.md\` indexes unresolved technical debt; read only records relevant to the current work.
 - Each active project's local index selects focused task guidance.
 
 Do not load every document. Follow \`AGENTS.md\`.
@@ -134,7 +137,63 @@ export function contextMaintenanceMarkdown(): string { return `# Context mainten
 - Keep cross-session task state in the selected project's \`ongoing/\` directory and list each active task in its \`README.md\`.
 - Read only the ongoing task matching the current work; do not use a global current-task pointer.
 - Move durable decisions into focused guidance when a task finishes, then remove its ongoing entry and task document.
+- Track unresolved technical debt separately from ongoing task state in the shared \`technical-debt/README.md\`; index each scoped record there and read only records relevant to the current work.
+- In each debt record, date the verified evidence and inventory, describe impact and migration constraints, and define completion and verification criteria. Refresh dated evidence before implementation; recording debt does not authorize the work.
+- When debt is resolved, update its index disposition and record verification in the debt record. Do not create history directories.
 - Do not introduce generated routing JSON or history directories into this scaffold.
+`; }
+
+export function technicalDebtReadmeMarkdown(): string { return `# Technical Debt
+
+This shared index lists scoped, unresolved technical debt. There are no open
+debt records yet. Copy [TEMPLATE.md](TEMPLATE.md) to a descriptive filename
+for each new record and add it to the index below. Update the index disposition
+when a record is resolved; retain its verification in the record.
+
+| Record | Scope | Disposition |
+| --- | --- | --- |
+| None | — | — |
+
+Read only records relevant to the current work. These manually maintained
+records describe debt, not instructions or shared contracts. Recording debt does
+not approve implementation.
+`; }
+
+export function technicalDebtTemplateMarkdown(): string { return `# [Descriptive debt title]
+
+- **Status:** Open
+- **Verified:** YYYY-MM-DD
+- **Scope/owner:** Unknown (identify the affected scope and owner if known)
+
+## Problem
+
+Describe the unresolved technical debt and its boundaries.
+
+## Evidence and inventory
+
+List dated evidence and affected paths, versions, or counts. Refresh this
+inventory before implementation.
+
+## Impact
+
+Describe observed or likely consequences of leaving the debt unresolved.
+
+## Migration constraints
+
+Describe compatibility, sequencing, ownership, or other constraints.
+
+## Completion criteria
+
+List the conditions required to consider the debt resolved.
+
+## Verification
+
+Not performed. Describe the checks required and record their results when run.
+
+## Resolution (optional)
+
+Record disposition, date, and outcome when resolved; update the index. This
+record does not authorize implementation.
 `; }
 
 export function ongoingReadmeMarkdown(): string { return `# Ongoing Tasks

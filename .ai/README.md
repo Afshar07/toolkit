@@ -8,6 +8,7 @@ step 7, then follow the route exactly in order.
 | File | Read when you're... |
 | --- | --- |
 | `ongoing/README.md` | continuing an in-progress task; read only the matching task document |
+| `technical-debt/README.md` | recording, reviewing, or resolving technical debt; read only the matching debt record |
 | `projects/architecture.md` | changing source layout, module boundaries, CLI integration, context generation, agent lifecycle, setup, scanning, doctor, CI, or releases |
 
 ## Rules

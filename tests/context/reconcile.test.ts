@@ -4,6 +4,8 @@ import * as nodePath from "node:path";
 import * as path from "pathe";
 import { afterEach, describe, expect, it } from "vitest";
 import { addToolkitMarker, applyContextPlan, inspectContextPlan } from "../../src/context/reconcile.js";
+import { createAiContextPlan } from "../../src/context/plan.js";
+import { setupAiContext } from "../../src/context/setup.js";
 
 const temporaryDirectories: string[] = [];
 afterEach(async () => { await Promise.all(temporaryDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))); });
@@ -31,6 +33,24 @@ describe("context reconciliation", () => {
     const inspected = await inspectContextPlan(directory, [{ relativePath: "new.md", content: "new" }, { relativePath: "managed.md", content: "updated" }, { relativePath: "conflict.md", content: "replacement" }]);
     await expect(applyContextPlan(inspected, { decisions: { "managed.md": "replace", "conflict.md": "skip" } })).resolves.toMatchObject({ created: ["new.md"], replaced: ["managed.md"], skipped: ["conflict.md"] });
     await expect(readFile(path.join(directory, "conflict.md"), "utf8")).resolves.toBe("keep");
+  });
+
+  it("preserves a maintained debt index and user record during plan reconciliation", async () => {
+    const directory = await temporaryDirectory();
+    const options = { workspaceName: "Workspace", workspacePurpose: "Purpose", projects: [{ id: "root", path: ".", scope: "Root" }] };
+    await setupAiContext(directory, options);
+    const indexPath = path.join(directory, ".ai/technical-debt/README.md");
+    const recordPath = path.join(directory, ".ai/technical-debt/slow-query.md");
+    const index = `${await readFile(indexPath, "utf8")}\n| [Slow query](slow-query.md) | root | Open |\n`;
+    await writeFile(indexPath, index);
+    await writeFile(recordPath, "# Slow query\n\nUser evidence.\n");
+
+    const inspected = await inspectContextPlan(directory, createAiContextPlan(options));
+    expect(inspected.find((file) => file.relativePath === ".ai/technical-debt/README.md")?.state).toBe("conflict");
+    const result = await applyContextPlan(inspected, { decisions: { ".ai/technical-debt/README.md": "skip" } });
+    expect(result.skipped).toContain(".ai/technical-debt/README.md");
+    await expect(readFile(indexPath, "utf8")).resolves.toBe(index);
+    await expect(readFile(recordPath, "utf8")).resolves.toBe("# Slow query\n\nUser evidence.\n");
   });
 
   it("backs up replaced originals under the supplied root", async () => {
