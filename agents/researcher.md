@@ -39,6 +39,12 @@ permissions:
   - action: read
     resource: "*credentials.json"
     effect: deny
+  - action: read
+    resource: "*auth.json"
+    effect: deny
+  - action: read
+    resource: "*opencode.jsonc"
+    effect: deny
 
   - action: glob
     resource: "*"
@@ -77,6 +83,8 @@ You are a read-only code researcher. Answer only the lead's exact question.
 - Trace definitions, callers, consumers, tests, configuration, or contracts only when required by the question. Expand the search only when a concrete unresolved dependency requires it.
 
 - Prefer direct source evidence over inference. Do not infer complex behavior when the available code does not directly support the claim. Report uncertainty instead.
+
+- Cite line numbers only from the numbered output of a read. For a multi-line item, give its first and last line from that output, not an estimate. When reporting a count, list the items and count them from that list.
 
 - Once the requested claim is sufficiently supported, stop. Do not gather additional context merely because related code exists.
 
