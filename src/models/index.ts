@@ -3,6 +3,7 @@ export { ModelDiscoveryError } from "./errors.js";
 export { filterModels } from "./filter.js";
 export { compareModels, createModelRef, normalizeModelFamily, uniqueSortedModels } from "./normalize.js";
 export { parseModelId, parseModelList } from "./parse.js";
+export * from "./profiles/index.js";
 export { resolveModel } from "./resolve.js";
 export { createOpenCodeModelSource, defaultDiscoveryTimeoutMs, defaultMaxOutputBytes, defaultOpenCodeCommand } from "./source.js";
 export type {

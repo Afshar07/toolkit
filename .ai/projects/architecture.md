@@ -54,6 +54,56 @@ stage is `ambiguous`, never silently chosen, and no fuzzy scoring is used. Tests
 fixtures and a Node-based fake CLI, never the real OpenCode. The module does not write
 OpenCode configuration and has no CLI command yet.
 
+### Model profiles (`src/models/profiles/`)
+
+Phase 2 adds persistent, versioned profiles on top of discovery/resolution. No CLI, no
+OpenCode configuration writes, no change to `.toolkit/agents.json` or agent Markdown.
+
+- **Modules:** `schema` (validation), `serialize` (deterministic text), `storage` (safe
+  read/atomic write), `store` (profile CRUD), `state` (local state), `active` (active
+  profile and scope precedence), `resolutions` (saved exact IDs), `resolve-agent` /
+  `resolve-profile` (resolution), `location` (paths). Types are `I`-prefixed in `types.ts`.
+- **Two documents per scope, beside `agents.json`:** `<root>/.toolkit/models/profiles.json`
+  (portable preferences only) and `<root>/.toolkit/models/local.json` (active profile name
+  and exact `provider/model` IDs per profile/agent; machine-specific, keep out of VCS).
+  `<root>` is the project, or the OpenCode config root for global. Locations take the same
+  `AgentTarget` as the agent lifecycle (so `--global` maps directly) and reuse
+  `assertSafeTargetDirectory`; home/env are injectable.
+- **Schema:** `schemaVersion: 1` only; newer versions throw `unsupported-schema` and the
+  file is untouched. Unknown properties are **rejected**, not dropped (a typo must not
+  turn a restriction into none). A preference is `{id?, family?, allowedProviders?,
+  patterns?, fallbacks?: criteria[]}` with at least one of id/family/patterns; `family`
+  requires `allowedProviders` (matches Phase 1, which skips family matching without it);
+  an `id` must not conflict with `allowedProviders`; patterns must contain a literal
+  character. Provider and pattern lists are sets and are sorted on write: order never
+  implies priority. Names are `^[a-z0-9][a-z0-9-]*$` (agent names match the registry's
+  rule, so any current or future canonical agent, e.g. `external-researcher`, works).
+- **Resolution:** delegates to Phase 1 `resolveModel` per criterion; matching is not
+  reimplemented. Criteria are tried in order; `unavailable` moves to the next fallback,
+  but `ambiguous` is returned as-is (no fallback skips an ambiguity). A saved ID is reused
+  only if it is in the inventory and among the deciding criterion's candidates, so
+  changed restrictions invalidate it; otherwise it is reported as `staleSelection`
+  (`missing` | `incompatible`). A saved ID may resolve a genuine ambiguity because it is
+  the user's explicit choice among exactly those candidates. Outcomes
+  (`resolved`/`ambiguous`/`unavailable`/`invalid`) are values; exceptions
+  (`ModelProfileError`) are only for invalid input/config, unsafe paths, filesystem errors.
+  Resolving never writes; saving is explicit (`saveModelResolutions`, which rejects IDs
+  the current preference would not allow).
+- **Absent files are empty state**, not corruption. Malformed/unsafe files throw and are
+  never overwritten. Writes are exclusive-temp + rename, skipped when bytes are identical;
+  no-op edits compare canonical text so hand-formatted files are not reformatted.
+  Read-modify-write is unlocked: concurrent writers may lose an update, never corrupt.
+- **Active profile:** activation records state only (Phase 3 applies it). Removing the
+  active profile requires `replacementProfile` or `deactivate: true`, else `active-profile`
+  is returned and nothing changes. State is updated before the profile document so an
+  interruption never leaves an active-but-undefined profile.
+- **Scope precedence** (`selectEffectiveModelProfile`): the project's active profile wins
+  over the global one; names resolve project first, then global; a same-named project
+  profile fully shadows the global one (never merged); a global selection can only mean a
+  global profile; an undefined name is `profile-missing` with no substitution. Saved
+  resolutions belong to the scope that made them. Single-location APIs accept
+  `inheritFrom` so a project may activate a global-only profile.
+
 ## Toolkit agent distribution
 
 Keep these layers distinct:

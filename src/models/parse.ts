@@ -31,6 +31,21 @@ export function parseModelId(value: string): IModelRef | undefined {
   return typeof result === "string" ? undefined : result;
 }
 
+/** True when `value` is a provider segment Phase 1 would accept in a discovered ID. */
+export function isValidModelProvider(value: string): boolean {
+  return value.length <= maxEntryLength && providerPattern.test(value);
+}
+
+/** True when `value` is a model segment (possibly nested with `/`) Phase 1 would accept in a discovered ID. */
+export function isValidModelName(value: string): boolean {
+  return parseModelId(`p/${value}`) !== undefined;
+}
+
+/** True when `value` is a safe glob: bounded, free of forbidden characters, and not made only of wildcards. */
+export function isValidModelPattern(value: string): boolean {
+  return value.length > 0 && value.length <= maxEntryLength && !forbiddenCharacters.test(value) && /[^*?]/.test(value);
+}
+
 function validateEntry(entry: string): IModelRef | ModelRejectionReason {
   if (entry.length > maxEntryLength) return "too-long";
   if (forbiddenCharacters.test(entry)) return "invalid-characters";
