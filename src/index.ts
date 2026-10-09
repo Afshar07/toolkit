@@ -29,3 +29,4 @@ export type { IPreparedAgentRegistry, IToolkitRegistryInfo } from "./registry/re
 export type { IToolkitRegistryPaths } from "./registry/path.js";
 export { readAgentManifest, writeAgentManifest } from "./agents/manifest.js";
 export type { AgentOwnershipManifest, InstalledAgentRecord } from "./agents/manifest.js";
+export * from "./models/index.js";

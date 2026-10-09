@@ -10,6 +10,7 @@ src/
 ├── scanner/           # Inspects Git workspaces; no CLI dependency
 ├── workspace/         # Manifest schema, validation, and discovery
 ├── setup/             # Safe directory creation and bounded Git cloning
+├── models/            # Model discovery (injectable source) and deterministic resolution; no CLI dependency
 └── doctor/            # Read-only prerequisite checks
 ```
 
@@ -40,6 +41,18 @@ src/
   sibling processes still run: Windows can retain directory locks and fail test
   cleanup with `EBUSY`. `tests/scanner/scan-lifecycle.test.ts` covers both unsafe
   URLs and Git failures while another remote read remains pending.
+
+## Model discovery and resolution
+
+`src/models/` holds no provider-specific IDs. `opencode models` prints one complete
+`provider/model` ID per line (verified on v2.0.25); only the first `/` splits the
+provider, so nested IDs and numeric suffixes stay intact. Discovery reads through an
+injectable `IModelDiscoverySource`; the default runs OpenCode via `execa` without a
+shell, with a timeout and output cap. `resolveModel` order: exact ID, exact normalized
+family within `allowedProviders`, explicit glob patterns. More than one match at a
+stage is `ambiguous`, never silently chosen, and no fuzzy scoring is used. Tests use
+fixtures and a Node-based fake CLI, never the real OpenCode. The module does not write
+OpenCode configuration and has no CLI command yet.
 
 ## Toolkit agent distribution
 
