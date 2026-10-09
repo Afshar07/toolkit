@@ -6,6 +6,7 @@ import { readAgentManifest } from "./manifest.js";
 import { normalizeCanonicalAgentContent, readCanonicalAgentRegistry } from "./registry.js";
 import { hashAgentContent, recordPublishedAgent } from "./sync.js";
 import { agentDirectory, assertSafeTargetDirectory, resolveAgentTarget, resolveGlobalAgentTarget, type IAgentTarget } from "./target.js";
+import { inspectMarkdownModel } from "../models/opencode/markdown-model.js";
 import { defaultToolkitRegistryRemote } from "../registry/git.js";
 import { localRegistryExists, prepareAgentRegistryForUpdate } from "../registry/registry.js";
 import { resolveToolkitRegistryPaths, type IToolkitRegistryPaths } from "../registry/path.js";
@@ -116,7 +117,8 @@ async function publishSelectedAgents(name: string | undefined, options: IPublish
       const agentName = fileName.slice(0, -3);
       const agentPath = selectedPath ?? await safeProjectAgentPath(projectRoot, agentName);
       const originalLocalContent = selectedContent ?? await readFile(agentPath, "utf8");
-      const canonicalLocalContent = normalizeCanonicalAgentContent(originalLocalContent);
+      /** Machine-specific frontmatter `model` is never part of the shared definition; only that line is removed. */
+      const canonicalLocalContent = normalizeCanonicalAgentContent(inspectMarkdownModel(originalLocalContent).stripped);
       const upstreamContent = upstream.agents[fileName];
       const record = ownership.installed[agentName];
       const overridden = ownership.overrides.includes(agentName);
@@ -181,7 +183,9 @@ async function publishSelectedAgents(name: string | undefined, options: IPublish
           throw new Error(`Agent path changed during update: ${currentPath}`);
         }
       }
-      for (const agent of changed) await recordPublishedAgent(projectRoot, agent.name, agent.canonicalLocalContent, proposedVersion, {
+      // Publication makes the registry portable, but isn't a migration approval. Keep the
+      // installed working model until the staged migration has prepared its replacement.
+      for (const agent of changed) await recordPublishedAgent(projectRoot, agent.name, normalizeCanonicalAgentContent(agent.originalLocalContent), proposedVersion, {
         removeOverride: agent.overridden && options.includeOverride === true,
         originalContent: agent.originalLocalContent,
       });

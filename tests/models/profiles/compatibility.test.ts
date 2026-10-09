@@ -62,7 +62,7 @@ describe("compatibility with agent management", () => {
     const location = await projectLocation(roots);
     await toolkit.createModelProfile(location, "openai", { agents: { lead: { id: "openai/gpt-5.5" } } });
     expect(await readFile(path.resolve("agents", "lead.md"), "utf8")).toBe(before);
-    expect(before).toMatch(/^---[\s\S]*?model:/);
+    expect(before).not.toMatch(/^model:/m);
   });
 
   it("exposes profile APIs from the package entry point and does not need OpenCode to edit a profile", async () => {

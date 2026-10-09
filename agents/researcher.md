@@ -1,7 +1,6 @@
 ---
 description: Searches and traces code cheaply, returning concise evidence with file and line references.
 mode: subagent
-model: cpa-gui/claude-haiku-4-5-20251001
 steps: 8
 permissions:
   - action: read

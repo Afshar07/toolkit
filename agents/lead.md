@@ -1,7 +1,6 @@
 ---
 description: Leads engineering work by planning, delegating execution, reviewing changes, and verifying outcomes.
 mode: primary
-model: cpa-gui/claude-sonnet-5-5
 permissions:
   - action: subagent
     resource: "*"

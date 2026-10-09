@@ -51,7 +51,7 @@ injectable `IModelDiscoverySource`; the default runs OpenCode via `execa` withou
 shell, with a timeout and output cap. `resolveModel` order: exact ID, exact normalized
 family within `allowedProviders`, explicit glob patterns. More than one match at a
 stage is `ambiguous`, never silently chosen, and no fuzzy scoring is used. Tests use
-fixtures and a Node-based fake CLI, never the real OpenCode. The module does not write
+fixtures and a Node-based fake CLI, never the real OpenCode. Discovery does not write
 OpenCode configuration and has no CLI command yet.
 
 ### Model profiles (`src/models/profiles/`)
@@ -103,6 +103,43 @@ OpenCode configuration writes, no change to `.toolkit/agents.json` or agent Mark
   global profile; an undefined name is `profile-missing` with no substitution. Saved
   resolutions belong to the scope that made them. Single-location APIs accept
   `inheritFrom` so a project may activate a global-only profile.
+
+### OpenCode application (`src/models/opencode/`)
+
+Phase 3 is library-only. `planModelProfileApplication` resolves a stored or active
+profile using Phase 1 inventory and Phase 2 saved selections. Missing/ambiguous
+models block every write. `applyModelProfilePlan` accepts an unchanged process-local
+plan; dry-run reads/validates without directories, backups, or state writes.
+
+- `jsonc-editor` uses `jsonc-parser` for minimal edits to `agents.<name>.model`.
+  Malformed syntax, duplicate keys, and incompatible containers are rejected.
+  Comments, unknown settings, permissions, and other agent properties are preserved.
+- `config-files` uses the single existing `opencode.json`/`opencode.jsonc` in the
+  selected scope, including project `.opencode/`; multiple candidates are a conflict.
+  With no file, it creates root `opencode.jsonc`. No competing config is created.
+- `.toolkit/models/applied.json` owns independent JSONC assignments by relative
+  config path and last applied model. Agent-file ownership stays in `agents.json`.
+  Edited owned assignments and unowned differing assignments require per-agent
+  consent. Identical unowned values are not adopted merely because they match.
+- Only present, unchanged managed agent Markdown is eligible. Overrides are skipped;
+  local/unmanaged/modified agents are protected. Hardcoded models require staged
+  migration: replacement config first, stripped Markdown and hash reconciliation
+  next, model ownership and local resolutions last. Instructions remain unchanged.
+- Routine `updateAgents` refuses to erase a working Markdown model when switching
+  to model-free canonical content. Publication strips models from registry content,
+  but preserves installed working models until explicit migration.
+- Writes use same-directory exclusive temporary files, backups of replaced files,
+  and exact-byte snapshot checks. Multi-file operations are not transactions;
+  failures return changed paths and recovery backups, not a success result.
+
+OpenCode v2.0.25 isolated probes verified plural `agents`, legacy `agent`, string
+`provider/model[#variant]` and object model syntax. Precedence for an agent model:
+project Markdown > project `.opencode` config > project root config > global
+Markdown > global config. Within a directory `.jsonc` beats `.json`; this adapter
+rejects competing files instead of guessing. `inspectEffectiveOpenCodeModels` is
+static inspection, not runtime validation; environment/remote config and existing
+session model selections aren't evaluated. Session selection behavior is documented,
+not runtime-verified. Global plans report project shadows only for supplied context.
 
 ## Toolkit agent distribution
 

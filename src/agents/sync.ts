@@ -5,6 +5,7 @@ import * as path from "pathe";
 import { bundledAgentRegistry, type ICanonicalAgentRegistry } from "./registry.js";
 import { readAgentManifest, writeAgentManifest, type AgentOwnershipManifest } from "./manifest.js";
 import { agentDirectory, assertSafeTargetDirectory, ensureSafeTargetDirectory, resolveAgentTarget, type AgentTarget } from "./target.js";
+import { inspectMarkdownModel } from "../models/opencode/markdown-model.js";
 
 export type ManagedAgentState = "current" | "update-available" | "modified" | "missing" | "not-installed" | "unmanaged-collision" | "override";
 
@@ -122,6 +123,13 @@ export async function updateAgents(projectRoot: AgentTarget, options: UpdateAgen
       result.restored.push(agent.name);
     } else {
       await assertRegularTargetHash(target, agent.localHash);
+      const existing = await readRegularAgent(target);
+      // A routine update is not model migration consent. Stage a JSONC replacement
+      // with migrateAgentModels before installing a model-free canonical template.
+      if (existing !== undefined && inspectMarkdownModel(existing).model !== undefined && inspectMarkdownModel(content).model === undefined) {
+        result.conflicts.push(agent.name);
+        continue;
+      }
       await writeFile(target, content, "utf8");
       result.updated.push(agent.name);
     }

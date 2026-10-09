@@ -1,7 +1,6 @@
 ---
 description: Researches external documentation and information, returning concise evidence with source links.
 mode: subagent
-model: cpa-gui/claude-sonnet-5-5
 steps: 10
 permissions:
   - action: read
