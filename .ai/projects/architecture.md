@@ -145,6 +145,18 @@ not runtime-verified. Global plans report project shadows only for supplied cont
 ### Model CLI (`src/commands/models.ts`, `src/commands/models/`)
 
 Phase 4 exposes `list`, `profiles`, `configure`, `use`, `set`, and `status` via Citty.
+Phase 5 adds read-only `doctor` discovery diagnostics (nonzero for discovery failure,
+conflicts or required migration/recovery), while `status` remains offline. Discovery
+subprocess stderr is never relayed because it can contain provider credentials.
+Recovery re-planning exceptions retain already-written paths and backup evidence.
+Status reports missing active definitions, stale assignment records and drift between
+saved intent and configured assignments; backup enumeration also validates ancestors.
+Source/compiled subprocess lifecycle tests use a platform-specific fake OpenCode
+executable; injected migration tests cover each staged write, backup creation,
+recovery re-planning and CLI activation failure. The npm tarball includes the model
+integration guide and tests validate root-exported model APIs in a clean consumer.
+Profile file-symlink fixture failures are no longer silently skipped; missing Windows
+symlink permission must remain an explicit unverified/failing safety gate.
 CLI presentation stays outside model core. Clack's installed autocomplete provides
 searchable selection; fuzzy filtering is UI-only, never deterministic resolution.
 Read-only profile/status operations are offline; list and mutating application

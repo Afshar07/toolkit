@@ -14,6 +14,7 @@ agent Markdown or JSONC manually.
 | `toolkit models use <profile>` | Resolve, preview, and safely apply a saved profile |
 | `toolkit models set <agent> [model]` | Update one agent in the active profile; omit model for searchable selection |
 | `toolkit models status` | Read-only inspection of saved and statically effective state; supports `--json` |
+| `toolkit models doctor` | Read-only discovery plus profile, ownership and recovery diagnostics; supports `--json`; never inference |
 
 All commands accept `--destination <path>` or `--global` (mutually exclusive).
 Project scope defaults to the current directory. Mutating commands support
@@ -123,6 +124,16 @@ problems from local evidence. Global assignments may be shadowed by project file
 It never reports an existing session's selected model or verifies inference. Open
 a new OpenCode session if configuration changes do not affect an existing one.
 
+Use `toolkit models doctor` when offline status cannot determine whether the current
+inventory resolves a preference. It discovers IDs and reports missing/ambiguous
+preferences, stale saved selections, stale assignment ownership, edited assignments,
+configuration conflicts, pending migration and provable interrupted hash repair.
+It never writes, prompts or sends inference requests. Exit code 1 means discovery
+failed or conflicts/migration/recovery need attention; JSON output is still available.
+Provider stderr is deliberately withheld from discovery errors because providers
+can print credentials or configuration. Run `opencode models` locally for details;
+do not share unredacted logs. A backup's existence alone does not prove interruption.
+
 ## Verification boundaries
 
 Command tests use isolated temporary project/global roots and injected discovery,
@@ -130,6 +141,13 @@ so they do not authenticate providers or contact a provider network. Selector te
 drive Clack with terminal-like streams, including search, navigation and cancellation.
 Live provider inference and changing an already-running OpenCode session are not
 verified by these tests.
+
+Source and compiled CLI lifecycle tests additionally execute real Node subprocesses
+against a deterministic fake OpenCode executable. They verify switching, direct
+assignment, exit codes, ownership, exact-byte/mtime idempotency and dry-run behavior.
+Profile creation in those subprocess tests uses the library API, not a manually
+operated wizard. Mocked wizard/consent tests and terminal-stream selector tests are
+automated coverage, not evidence of manual interactive end-to-end verification.
 
 Windows security fixtures need permission to create file symbolic links (Developer
 Mode or an appropriately privileged test process). An `EPERM` while creating a
@@ -262,4 +280,24 @@ precedence. Global apply can accept `project` to report project shadows without
 writing project files. Neither API claims runtime/session effectiveness: injected
 environment config, organization config, defaults, and existing session selections
 are outside inspection. Existing-session agent-selection behavior was documented
-but not runtime-tested. Live inference is outside this phase.
+but not runtime-tested. Live inference requires separately authorized access and is
+not part of ordinary diagnostics or automated tests.
+
+The Phase 5 local v2.0.25 smoke attempt did **not** establish runtime acceptance:
+isolated debug commands collided with the managed-service port, `debug agents`
+does not accept `--standalone`, and standalone discovery did not expose the fixture
+provider. Real settings/services were not changed to work around this. Repeat the
+configuration/agent/new-session precedence checks in a genuinely disposable runtime
+before treating Phase 5 as fully verified. No inference requests were made.
+
+## Release gate
+
+Build, the complete test suite, `npm run verify`, and `npm pack --dry-run` must be
+checked before publication. The tarball includes this guide, compiled model/profile/
+OpenCode/CLI modules and bundled model-independent canonical agents. Only the root
+package export is public; importing internal source paths is unsupported. The existing
+release workflow requires successful exact-commit Ubuntu and Windows Release Verify
+before OIDC publication. Do not equate a local build or partial test pass with that gate.
+The additive model CLI/library feature warrants a **minor** version bump from 1.1.3
+(1.2.0), after blockers are resolved and release approval is given; this work does not
+change the version or run the mutating release script.

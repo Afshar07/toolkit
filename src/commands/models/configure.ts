@@ -32,7 +32,10 @@ export async function configure(cli: IModelCommandOptions): Promise<void> {
   }
   if (action === "apply") {
     const result = await executeProfile({ target: cli.target, profile: name, profileDefinition: existing!, models }, cli);
-    if (result && !cli.dryRun) await setActiveModelProfile(location, name);
+    if (result && !cli.dryRun) {
+      try { await setActiveModelProfile(location, name); }
+      catch (error) { throw new Error(`Configuration applied but active-profile persistence failed: ${String(error)}. Switching is incomplete; preserve changed files/backups reported above and retry models use ${name}.`); }
+    }
     return;
   }
   const state = await readLocalModelState(location);
@@ -80,5 +83,8 @@ export async function configure(cli: IModelCommandOptions): Promise<void> {
   console.log(`Profile ${name} saved; not yet applied.`);
   if (!models.length || !await confirm(`Apply profile ${name} now?`)) return;
   const result = await executeProfile({ target: cli.target, profile: name, profileDefinition: definition, models, selections }, cli);
-  if (result) await setActiveModelProfile(location, name);
+  if (result) {
+    try { await setActiveModelProfile(location, name); }
+    catch (error) { throw new Error(`Profile saved and configuration applied but active-profile persistence failed: ${String(error)}. Switching is incomplete; preserve changed files/backups reported above and retry models use ${name}.`); }
+  }
 }

@@ -9,7 +9,8 @@
   "exports": "./dist/index.js",
   "files": [
     "dist",
-    "agents"
+    "agents",
+    "docs/model-integration.md"
   ],
   "publishConfig": {
     "access": "public"

@@ -91,6 +91,7 @@ toolkit models set coder cpa-gui/gpt-6.1-sol --non-interactive
 toolkit models use openai --dry-run --non-interactive
 toolkit models list --provider cpa-gui --search sonnet --json
 toolkit models status --json
+toolkit models doctor --json
 ```
 
 Profile names are user-defined, not built-in provider presets. `models set` updates
@@ -98,6 +99,10 @@ only the selected agent in the active profile, after safe application succeeds.
 Omit its model argument to open a searchable selector. Read-only profile listing
 and status work without OpenCode installed. Use `--destination <project>` for a
 project or `--global` for the global OpenCode scope, never both.
+`models doctor` adds read-only discovery diagnostics for missing/ambiguous models,
+stale ownership and recovery warnings. It does not make inference requests; warnings
+or failed discovery produce a nonzero exit code. Provider stderr is withheld to
+avoid leaking credentials; inspect provider errors locally with `opencode models`.
 
 A **preference** is portable intent, a **resolution** is an exact model ID selected
 on this machine, and an **applied assignment** is OpenCode configuration. These are

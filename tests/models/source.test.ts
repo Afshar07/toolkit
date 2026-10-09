@@ -27,11 +27,12 @@ describe("createOpenCodeModelSource", () => {
     await expect(source.read()).rejects.toMatchObject({ kind: "timeout", message: expect.stringContaining("300ms") });
   }, 15_000);
 
-  it("reports non-zero exits with a bounded stderr summary", async () => {
+  it("reports non-zero exits without relaying potentially sensitive stderr", async () => {
     const source = nodeSource("console.error('line one\\nline two ' + 'x'.repeat(500)); process.exit(3)");
     const error = await source.read().catch((caught: unknown) => caught as { kind: string; exitCode: number; message: string });
     expect(error).toMatchObject({ kind: "exit", exitCode: 3 });
-    expect(error.message).toContain("line one line two");
+    expect(error.message).not.toContain("line one");
+    expect(error.message).toContain("opencode models");
     expect(error.message.length).toBeLessThan(300);
   });
 
@@ -50,7 +51,7 @@ describe("createOpenCodeModelSource", () => {
     const secret = "sk-test-secret-value";
     const ok = nodeSource("console.log('env/' + process.env.TOOLKIT_TEST_VALUE)", { environment: { TOOLKIT_TEST_VALUE: "set" } });
     await expect(ok.read()).resolves.toBe("env/set");
-    const failing = nodeSource("process.exit(2)", { environment: { API_KEY: secret } });
+    const failing = nodeSource("console.error(JSON.stringify({provider: {apiKey: process.env.API_KEY}})); process.exit(2)", { environment: { API_KEY: secret } });
     const error = await failing.read().catch((caught: unknown) => caught as Error);
     expect(error.message).not.toContain(secret);
   });

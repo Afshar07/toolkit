@@ -7,6 +7,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 /** Scripted OpenCode inventory; `error` simulates a failed `opencode models`. Nothing here touches a process or network. */
 const discovery = vi.hoisted(() => ({ output: "", error: undefined as Error | undefined, reads: 0 }));
+const persistence = vi.hoisted(() => ({ failActivation: false }));
+vi.mock("../../src/models/profiles/active.js", async (original) => {
+  const actual = await original<typeof import("../../src/models/profiles/active.js")>();
+  return { ...actual, setActiveModelProfile: async (...args: Parameters<typeof actual.setActiveModelProfile>) => {
+    if (persistence.failActivation) throw new Error("injected activation failure");
+    return actual.setActiveModelProfile(...args);
+  } };
+});
 
 /** Answers for every Clack prompt. Unscripted free-text prompts return the empty string. */
 const script = vi.hoisted(() => ({
@@ -141,6 +149,7 @@ beforeEach(async () => {
   discovery.output = inventory.join("\n");
   discovery.error = undefined;
   discovery.reads = 0;
+  persistence.failActivation = false;
   Object.assign(script, { text: [], choose: [], consent: "all", confirm: true, models: {}, seenPrompts: [] });
   selector.calls.length = 0;
   sandbox.root = await mkdtemp(path.join(os.tmpdir(), "toolkit-models-command-"));
@@ -454,6 +463,40 @@ describe("models configure", () => {
 });
 
 describe("models use", () => {
+  it("resolves copied portable profiles on a new machine without the first machine's exact IDs", async () => {
+    const portable = { agents: { coder: { allowedProviders: ["cpa-gui"], patterns: ["cpa-gui/gpt-6.1-sol-*"] } } };
+    const first = await workspace({ profiles: { portable } });
+    discovery.output = "cpa-gui/gpt-6.1-sol-123";
+    expect((await run("use", "portable", ...scope(first), "--non-interactive")).ok).toBe(true);
+    const second = await workspace({ profiles: {} });
+    await mkdir(second.location.directory, { recursive: true });
+    await writeFile(second.location.profilesPath, await readFile(first.location.profilesPath));
+    discovery.output = "cpa-gui/gpt-6.1-sol-456";
+    expect((await run("use", "portable", ...scope(second), "--non-interactive")).ok).toBe(true);
+    expect(await assigned(second, "coder")).toBe("cpa-gui/gpt-6.1-sol-456");
+    expect(await assigned(first, "coder")).toBe("cpa-gui/gpt-6.1-sol-123");
+    const third = await workspace({ profiles: { portable } });
+    discovery.output = "cpa-gui/gpt-6.1-sol-456\ncpa-gui/gpt-6.1-sol-789";
+    const before = await tree(third.root);
+    expect((await run("use", "portable", ...scope(third), "--non-interactive")).ok).toBe(false);
+    expect(await tree(third.root)).toEqual(before);
+  });
+  it("reports incomplete switching and preserves prior active state if activation fails after application", async () => {
+    const space = await workspace();
+    expect((await run("use", "openai", ...scope(space), "--non-interactive")).ok).toBe(true);
+    persistence.failActivation = true;
+    const result = await run("use", "anthropic", ...scope(space), "--non-interactive");
+    expect(result.ok).toBe(false);
+    expect(result.all).toContain("active-profile persistence failed");
+    expect(result.all).toContain("Backup:");
+    expect(await activeProfile(space)).toBe("openai");
+    expect(await assigned(space, "coder")).toBe("cpa-gui/claude-sonnet-5-5");
+    const diagnostic = await run("status", "--json", ...scope(space));
+    expect(diagnostic.stdout).toContain("saved profile proposes");
+    persistence.failActivation = false;
+    expect((await run("use", "anthropic", ...scope(space), "--non-interactive")).ok).toBe(true);
+    expect(await activeProfile(space)).toBe("anthropic");
+  });
   it("requires migration consent and preserves legacy models when declined", async () => {
     const space = await workspace({ profiles: { openai: profiles.openai! } });
     const file = path.join(agentDirectory(space.target), "coder.md");
@@ -746,6 +789,24 @@ describe("models set", () => {
 });
 
 describe("models status", () => {
+  it("reports a missing active profile without substituting another profile", async () => {
+    const space = await workspace({ active: "openai" });
+    await writeFile(space.location.profilesPath, JSON.stringify({ schemaVersion: 1, profiles: {} }));
+    const before = await tree(space.root);
+    const result = await run("status", "--json", ...scope(space));
+    expect(result.ok).toBe(true);
+    expect(result.stdout).toContain("Active profile openai is missing");
+    expect(await tree(space.root)).toEqual(before);
+  });
+  it("reports stale ownership even without an active profile", async () => {
+    const space = await workspace();
+    await writeFile(path.join(space.location.directory, "applied.json"), JSON.stringify({ schemaVersion: 1, agents: { coder: { config: ".opencode/opencode.jsonc", model: "openai/gpt-6.1-sol" } } }));
+    const before = await tree(sandbox.root);
+    const result = await run("status", "--json", ...scope(space));
+    expect(result.ok).toBe(true);
+    expect(result.stdout).toContain("stale assignment ownership");
+    expect(await tree(sandbox.root)).toEqual(before);
+  });
   it("reports saved, local and applied state as read-only JSON without discovery", async () => {
     const space = await workspace();
     await run("use", "openai", ...scope(space), "--non-interactive");
@@ -788,5 +849,31 @@ describe("models status", () => {
     expect(values).toContain("globalonly");
     expect(values).not.toContain(project.root);
     expect(global.root.startsWith(sandbox.root)).toBe(true);
+  });
+});
+
+describe("models doctor", () => {
+  it("discovers missing and ambiguous models without writing or prompting", async () => {
+    const space = await workspace({ profiles: { shared: profiles.shared! }, active: "shared" });
+    const before = await tree(sandbox.root);
+    const ambiguous = await run("doctor", "--json", ...scope(space));
+    expect(ambiguous.ok).toBe(false);
+    expect(ambiguous.stdout).toContain("ambiguous");
+    discovery.output = "other/unrelated";
+    const missing = await run("doctor", "--json", ...scope(space));
+    expect(missing.ok).toBe(false);
+    expect(missing.stdout).toContain("unavailable");
+    expect(await tree(sandbox.root)).toEqual(before);
+    expect(script.seenPrompts).toEqual([]);
+  });
+
+  it("reports a failed discovery as a nonzero diagnostic, not inference success", async () => {
+    const space = await workspace();
+    discovery.error = new Error("OpenCode unavailable");
+    const before = await tree(sandbox.root);
+    const result = await run("doctor", "--json", ...scope(space));
+    expect(result.ok).toBe(false);
+    expect(result.json()).toMatchObject({ discovery: { status: "unavailable", inferenceVerified: false } });
+    expect(await tree(sandbox.root)).toEqual(before);
   });
 });

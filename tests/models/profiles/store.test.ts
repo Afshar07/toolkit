@@ -415,18 +415,14 @@ describe("persistence safety", () => {
     expect(await listModelProfiles(location)).toEqual(["anthropic", "openai"]);
   });
 
-  it("refuses a symlinked configuration file", async (context) => {
+  it("refuses a symlinked configuration file", async () => {
     const location = await projectLocation(roots);
     const outside = await roots.create();
     await mkdir(location.directory, { recursive: true });
     const target = path.join(outside, "victim.json");
     await writeFile(target, JSON.stringify({ schemaVersion: 1, profiles: {} }));
-    try {
-      await symlink(target, location.profilesPath, "file");
-    } catch {
-      context.skip();
-      return;
-    }
+    // Fixture permission failures are unverified security coverage, not a passing gate.
+    await symlink(target, location.profilesPath, "file");
     await expectError(listModelProfiles(location), "unsafe-path");
     await expectError(createModelProfile(location, "openai", openai), "unsafe-path");
     expect(await readFile(target, "utf8")).toBe(JSON.stringify({ schemaVersion: 1, profiles: {} }));

@@ -127,5 +127,25 @@ export const modelsCommand = defineCommand({
         for (const limitation of status.limitations) console.log(limitation);
       },
     }),
+    doctor: defineCommand({ meta: { name: "doctor", description: "Read-only discovery, profile, ownership and recovery diagnostics (no inference)" }, args: { ...scopeArgs, json: jsonArg },
+      async run({ args, rawArgs }) {
+        const cli = options(args, rawArgs, readFlags);
+        let inventory;
+        let discoveryError: string | undefined;
+        try { inventory = await discoverModels({ openCode: { cwd: cli.target.scope === "project" ? cli.target.root : process.cwd() } }); }
+        catch (error) { discoveryError = error instanceof Error ? error.message : "OpenCode discovery failed."; }
+        const status = await inspectStatus(cli.target, inventory?.models);
+        const diagnostics = { ...status, discovery: inventory ? { status: "available", count: inventory.models.length, inferenceVerified: false } : { status: "unavailable", error: discoveryError, inferenceVerified: false } };
+        if (args.json) console.log(JSON.stringify(diagnostics));
+        else {
+          console.log(`Model diagnostics (${cli.target.scope}: ${cli.target.root})\nActive profile: ${status.activeProfile ?? "—"}\nDiscovery: ${inventory ? `${inventory.models.length} IDs (not inference verification)` : discoveryError}`);
+          for (const conflict of status.conflicts) console.warn(`Warning: ${conflict}`);
+          console.log(`Migration: ${JSON.stringify(status.migration)}`);
+          for (const backup of status.backups) console.log(`Recovery backup: ${backup}`);
+          for (const limitation of status.limitations) console.log(limitation);
+        }
+        if (discoveryError || status.conflicts.length || status.migration.legacyAgents.length || status.migration.recoveryPossible) process.exitCode = 1;
+      },
+    }),
   },
 });

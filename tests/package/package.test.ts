@@ -18,7 +18,7 @@ describe("published npm package", () => {
     const metadata = JSON.parse(packed.stdout) as Array<{ files: Array<{ path: string }> }>;
     const archive = path.join(output, (await readdir(output)).find((name) => name.endsWith(".tgz"))!);
     const listing = metadata[0]!.files.map((file) => `package/${file.path}`);
-    for (const required of ["package/package.json", "package/dist/cli.js", "package/dist/index.js", "package/dist/registry/registry.js", "package/agents/manifest.json", "package/agents/lead.md"]) {
+    for (const required of ["package/package.json", "package/dist/cli.js", "package/dist/index.js", "package/dist/registry/registry.js", "package/agents/manifest.json", "package/agents/lead.md", "package/docs/model-integration.md", "package/dist/commands/models.js", "package/dist/models/source.js", "package/dist/models/profiles/store.js", "package/dist/models/opencode/apply.js"]) {
       expect(listing).toContain(required);
     }
 
@@ -34,6 +34,8 @@ describe("published npm package", () => {
     expect(help.exitCode).toBe(0);
     const api = await execa(process.execPath, ["--input-type=module", "--eval", "import { hashAgentContent } from '@afshar7/toolkit'; console.log(hashAgentContent('ok').length)"], { cwd: consumer });
     expect(api.stdout).toBe("64");
+    const modelsApi = await execa(process.execPath, ["--input-type=module", "--eval", "import { discoverModels, resolveModel, createModelProfile, planModelProfileApplication, migrateAgentModels } from '@afshar7/toolkit'; console.log([discoverModels, resolveModel, createModelProfile, planModelProfileApplication, migrateAgentModels].every(fn => typeof fn === 'function'))"], { cwd: consumer });
+    expect(modelsApi.stdout).toBe("true");
 
     const home = path.join(root, "isolated-home");
     const project = path.join(root, "isolated-project");

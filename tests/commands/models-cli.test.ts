@@ -21,10 +21,10 @@ async function cli(args: string[]) {
 }
 
 describe("compiled models CLI", () => {
-  it("registers the command group and all six help routes", async () => {
+  it("registers the command group and all help routes", async () => {
     const result = await cli(["models", "--help"]);
     expect(result.exitCode).toBe(0);
-    for (const name of ["list", "profiles", "configure", "use", "set", "status"]) expect(result.stdout).toContain(name);
+    for (const name of ["list", "profiles", "configure", "use", "set", "status", "doctor"]) expect(result.stdout).toContain(name);
   });
 
   it.each(["use", "set"])("rejects missing required arguments for %s", async (command) => {
@@ -33,7 +33,7 @@ describe("compiled models CLI", () => {
     expect(await readdir(result.root)).toEqual([]);
   });
 
-  it.each(["list", "profiles", "configure", "use", "set", "status"])("shows %s help", async (command) => {
+  it.each(["list", "profiles", "configure", "use", "set", "status", "doctor"])("shows %s help", async (command) => {
     const result = await cli(["models", command, "--help"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain(command);

@@ -56,7 +56,13 @@ export async function migrateAgentModels(options: IApplyModelProfileOptions): Pr
   // Repair is its own step: only the manifest hash is behind, so record it, then plan the rest from fresh state.
   const repair = await applyModelProfilePlan(first.plan);
   if (repair.status !== "applied") return repair;
-  const second = await applyModelProfilePlan((await planMigration(options)).plan);
+  let second: IApplyModelProfileResult;
+  try {
+    second = await applyModelProfilePlan((await planMigration(options)).plan);
+  } catch (error) {
+    return { ...repair, status: "failed", manualIntervention: repair.filesChanged,
+      error: `Interrupted migration hash repaired, but re-planning failed: ${error instanceof Error ? error.message : String(error)}. Preserve reported backups and retry from fresh state.` };
+  }
   const filesChanged = [...repair.filesChanged, ...second.filesChanged];
   const backups = [...repair.backups, ...second.backups];
   if (second.status === "blocked" || second.status === "failed") {

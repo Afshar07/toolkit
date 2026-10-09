@@ -15,14 +15,16 @@ afterAll(dispose);
 describe.sequential("agent publication never publishes machine-specific models", { timeout: 30_000 }, () => {
   it("strips the published model while preserving the installed working model", async () => {
     const setup = await fixture();
-    await writeFile(agentPath(setup.project, "coder"), "---\r\ndescription: d\r\nmodel: cpa-gui/x\r\n---\r\nbody\r\n");
+    const preserved = "# model: comment\noptions:\n  model: nested/value\n";
+    const body = "body\nUse model: examples unchanged.\n```yaml\nmodel: example/value\n```\n";
+    await writeFile(agentPath(setup.project, "coder"), (`---\ndescription: d\n${preserved}model: cpa-gui/x\n---\n${body}`).replaceAll("\n", "\r\n"));
 
     const result = await publishAgent("coder", publishOptions(setup));
 
     expect(result.outcome).toBe("published");
-    expect(result.preview.diff).not.toContain("model:");
-    const published = "---\ndescription: d\n---\nbody\n";
-    const installed = "---\ndescription: d\nmodel: cpa-gui/x\n---\nbody\n";
+    expect(result.preview.diff).not.toContain("model: cpa-gui/x");
+    const published = `---\ndescription: d\n${preserved}---\n${body}`;
+    const installed = `---\ndescription: d\n${preserved}model: cpa-gui/x\n---\n${body}`;
     expect((await readLocalAgentRegistry(setup.paths)).agents["coder.md"]).toBe(published);
     /** Publication is not migration approval: the installed working model stays, only line endings are canonical. */
     await expect(readFile(agentPath(setup.project, "coder"), "utf8")).resolves.toBe(installed);

@@ -57,8 +57,9 @@ function classifyFailure(failure: IProcessFailure, command: string, timeoutMs: n
     return new ModelDiscoveryError("output-too-large", "OpenCode model discovery produced more output than the configured limit.");
   }
   if (typeof failure.exitCode === "number") {
-    const detail = summarize(failure.stderr);
-    return new ModelDiscoveryError("exit", `OpenCode model discovery exited with code ${failure.exitCode}${detail ? `: ${detail}` : "."}`, failure.exitCode);
+    // Provider errors can include credentials or complete configuration objects. Never
+    // relay untrusted stderr, even when bounded; inspect it locally in OpenCode instead.
+    return new ModelDiscoveryError("exit", `OpenCode model discovery exited with code ${failure.exitCode}. Run opencode models locally to inspect provider diagnostics (stderr withheld to protect credentials).`, failure.exitCode);
   }
   return new ModelDiscoveryError("failed", `OpenCode model discovery could not run${failure.code ? ` (${failure.code})` : ""}.`);
 }
@@ -67,11 +68,4 @@ function classifyFailure(failure: IProcessFailure, command: string, timeoutMs: n
 function looksLikeMissingCommand(failure: IProcessFailure): boolean {
   if (typeof failure.stderr !== "string") return false;
   return failure.exitCode === 1 && /is not recognized as an internal or external command/i.test(failure.stderr);
-}
-
-function summarize(value: unknown): string {
-  if (typeof value !== "string") return "";
-  // eslint-disable-next-line no-control-regex
-  const text = value.replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
-  return text.length > 200 ? `${text.slice(0, 200)}…` : text;
 }
