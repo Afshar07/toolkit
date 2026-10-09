@@ -9,6 +9,10 @@ import { readLocalModelState } from "../profiles/state.js";
 import { resolveModelProfile, selectionsFromResolution } from "../profiles/resolve-profile.js";
 import { serializeLocalModelState } from "../profiles/serialize.js";
 import { assertProfileName } from "../profiles/names.js";
+import { ModelProfileError } from "../profiles/errors.js";
+import { validateModelProfile } from "../profiles/schema.js";
+import type { IModelProfile } from "../profiles/types.js";
+import { pick, selectedAgents, validatedSelections } from "./plan-scope.js";
 import { inspectOpenCodeConfig } from "./config-files.js";
 import { readConfigAgentModel, editOpenCodeAgentModels } from "./jsonc-editor.js";
 import { inspectMarkdownModel } from "./markdown-model.js";
@@ -31,15 +35,30 @@ export async function buildModelProfilePlan(options: IPlanModelProfileOptions, p
     snapshots.push({ path: filePath, text: await readSafeText(target, filePath) });
   }
   const base = { target, assignments: [], files: [], conflicts: [], shadowed: [], snapshots };
+  if (options.profileDefinition !== undefined && options.profile === undefined) throw new ModelProfileError("invalid-input", "A profile definition requires an explicit profile name.");
   const profile = options.profile ?? await getActiveModelProfile(location);
   if (!profile) return { ...base, status: "no-profile" };
   assertProfileName(profile);
-  const found = await findProfile(location, profile, options.inheritFrom);
-  if (!found) return { ...base, profile, status: "not-found" };
+  let definition: IModelProfile;
+  if (options.profileDefinition !== undefined) {
+    const validated = validateModelProfile(options.profileDefinition);
+    if (!validated.ok) throw new ModelProfileError("invalid-input", "Invalid profile definition.", { issues: validated.issues });
+    definition = validated.value;
+  } else {
+    const found = await findProfile(location, profile, options.inheritFrom);
+    if (!found) return { ...base, profile, status: "not-found" };
+    definition = found.profile;
+  }
   if (options.inheritFrom) snapshots.push({ path: options.inheritFrom.profilesPath, text: await readSafeText(options.inheritFrom, options.inheritFrom.profilesPath), target: options.inheritFrom });
+  const requested = options.agents === undefined ? undefined : selectedAgents(options.agents, definition);
+  const scoped: IModelProfile = requested ? { agents: Object.fromEntries(requested.map((agent) => [agent, definition.agents[agent]!])) } : definition;
+  const overrides = validatedSelections(options.selections, scoped);
   const state = await readLocalModelState(location);
   const models = options.models ?? (await discoverModels({ source: options.source })).models;
-  const resolution = resolveModelProfile(models, found.profile, { selections: state.resolutions[profile] });
+  const saved = state.resolutions[profile] ?? {};
+  const resolution = resolveModelProfile(models, scoped, {
+    selections: requested ? { ...pick(saved, requested), ...overrides } : { ...saved, ...overrides },
+  });
   const config = await inspectOpenCodeConfig(target);
   if (config.status === "config-conflict") return { ...base, profile, resolution, status: "config-conflict", conflicts: config.files };
   snapshots.push({ path: config.file.path, text: config.file.text });

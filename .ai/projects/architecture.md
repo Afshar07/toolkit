@@ -52,12 +52,13 @@ shell, with a timeout and output cap. `resolveModel` order: exact ID, exact norm
 family within `allowedProviders`, explicit glob patterns. More than one match at a
 stage is `ambiguous`, never silently chosen, and no fuzzy scoring is used. Tests use
 fixtures and a Node-based fake CLI, never the real OpenCode. Discovery does not write
-OpenCode configuration and has no CLI command yet.
+OpenCode configuration. Phase 4 exposes discovery through `toolkit models list`.
 
 ### Model profiles (`src/models/profiles/`)
 
-Phase 2 adds persistent, versioned profiles on top of discovery/resolution. No CLI, no
-OpenCode configuration writes, no change to `.toolkit/agents.json` or agent Markdown.
+Phase 2 adds persistent, versioned profiles on top of discovery/resolution. Its core
+APIs have no CLI dependency or OpenCode configuration writes and do not change
+`.toolkit/agents.json` or agent Markdown.
 
 - **Modules:** `schema` (validation), `serialize` (deterministic text), `storage` (safe
   read/atomic write), `store` (profile CRUD), `state` (local state), `active` (active
@@ -106,7 +107,7 @@ OpenCode configuration writes, no change to `.toolkit/agents.json` or agent Mark
 
 ### OpenCode application (`src/models/opencode/`)
 
-Phase 3 is library-only. `planModelProfileApplication` resolves a stored or active
+Phase 3 provides the library adapter. `planModelProfileApplication` resolves a stored or active
 profile using Phase 1 inventory and Phase 2 saved selections. Missing/ambiguous
 models block every write. `applyModelProfilePlan` accepts an unchanged process-local
 plan; dry-run reads/validates without directories, backups, or state writes.
@@ -140,6 +141,23 @@ rejects competing files instead of guessing. `inspectEffectiveOpenCodeModels` is
 static inspection, not runtime validation; environment/remote config and existing
 session model selections aren't evaluated. Session selection behavior is documented,
 not runtime-verified. Global plans report project shadows only for supplied context.
+
+### Model CLI (`src/commands/models.ts`, `src/commands/models/`)
+
+Phase 4 exposes `list`, `profiles`, `configure`, `use`, `set`, and `status` via Citty.
+CLI presentation stays outside model core. Clack's installed autocomplete provides
+searchable selection; fuzzy filtering is UI-only, never deterministic resolution.
+Read-only profile/status operations are offline; list and mutating application
+discover through OpenCode. No model command refreshes the agent Git registry.
+
+Application planning accepts validated in-memory `profileDefinition` and exact
+`selections`, with optional `agents` to isolate a single-agent change. It retains
+snapshot and process-local approval guarantees; it never writes portable preferences.
+The CLI can therefore apply a proposed `set` before saving its preference, preserving
+old preferences when application fails. Exact local resolutions remain separate from
+provider-restricted normalized family preferences. Active state changes only after
+successful application. Migration and protected assignment consent use the existing
+Phase 3 boundaries; non-TTY input never implicitly grants protected consent.
 
 ## Toolkit agent distribution
 

@@ -1,10 +1,23 @@
 import type { AgentTarget, IAgentTarget } from "../../agents/target.js";
 import type { IModelRef, IModelDiscoverySource } from "../types.js";
-import type { IModelProfileLocation, IModelProfileResolution } from "../profiles/types.js";
+import type { IModelProfile, IModelProfileLocation, IModelProfileResolution, ModelResolutionSelections } from "../profiles/types.js";
 
 export interface IPlanModelProfileOptions {
   readonly target: AgentTarget;
   readonly profile?: string;
+  /**
+   * An in-memory profile definition used instead of looking `profile` up in the stores. Requires an explicit
+   * `profile` name (used for validation, local selections, and state) and must satisfy the profile schema.
+   * Planning and applying never write it to the portable profile store.
+   */
+  readonly profileDefinition?: IModelProfile;
+  /** Exact `provider/model` IDs by agent that override saved local selections for this plan only. */
+  readonly selections?: ModelResolutionSelections;
+  /**
+   * Restricts resolution and application to these agents of the profile. Other agents are neither resolved,
+   * checked, nor changed, and their saved selections are kept. Must be non-empty and name only profile agents.
+   */
+  readonly agents?: readonly string[];
   readonly models?: readonly IModelRef[];
   readonly source?: IModelDiscoverySource;
   readonly inheritFrom?: IModelProfileLocation;

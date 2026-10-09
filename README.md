@@ -30,6 +30,13 @@ toolkit agents manage coder --yes
 toolkit registry init
 toolkit registry status
 toolkit registry update
+
+toolkit models list
+toolkit models profiles
+toolkit models configure
+toolkit models use openai
+toolkit models set coder
+toolkit models status
 ```
 
 `scan` is interactive by default. A supplied workspace, name, or output skips that prompt. It records a root Git repository when the workspace itself is a repository, otherwise discovers child Git repositories using relative paths. Every discovered remote is recorded; `origin` is selected for cloning when available, and Toolkit asks you to choose when multiple remotes exist without an `origin`.
@@ -68,6 +75,37 @@ relevant to the current task. Update the record and index when debt is resolved
 or its disposition changes. The scaffold follows a custom shared context path
 when one is selected, and existing records retain the normal preservation and
 explicit-replacement protections.
+
+## Model management
+
+Install/authenticate OpenCode with your preferred provider, install Toolkit-managed
+agents with `toolkit agents update`, then run `toolkit models configure` to create
+or edit a named profile. The wizard searches the exact model IDs exposed by
+`opencode models`; it does not assume a model's vendor from the provider name.
+Create profiles named `openai` and `anthropic` with your chosen models, then switch:
+
+```sh
+toolkit models use openai
+toolkit models use anthropic
+toolkit models set coder cpa-gui/gpt-6.1-sol --non-interactive
+toolkit models use openai --dry-run --non-interactive
+toolkit models list --provider cpa-gui --search sonnet --json
+toolkit models status --json
+```
+
+Profile names are user-defined, not built-in provider presets. `models set` updates
+only the selected agent in the active profile, after safe application succeeds.
+Omit its model argument to open a searchable selector. Read-only profile listing
+and status work without OpenCode installed. Use `--destination <project>` for a
+project or `--global` for the global OpenCode scope, never both.
+
+A **preference** is portable intent, a **resolution** is an exact model ID selected
+on this machine, and an **applied assignment** is OpenCode configuration. These are
+not proof of runtime inference availability. Protected assignments need explicit
+per-agent consent; legacy managed Markdown models need approved staged migration.
+Existing sessions may require a new OpenCode session to use changed configuration.
+See [model management and integration](docs/model-integration.md) for command
+details, proxy suffix handling, ownership, and recovery.
 
 ## Canonical agents
 
